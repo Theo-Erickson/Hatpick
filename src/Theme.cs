@@ -30,7 +30,7 @@ namespace Hatpick
                 {"WinBg","#3a2414"}, {"WinText","#ffb88a"}, {"WinBorder","#6b3a1c"},
                 {"DotOk","#4cc38a"}, {"DotWarn","#e8b339"}, {"DotErr","#f2706b"}, {"DotInfo","#6f9bff"},
                 {"TintYellow","#3a3217"}, {"TintRed","#3a1d1f"}, {"TintDark","#2a2d3a"}, {"TintBlue","#1c2a4a"}, {"TintBrown","#33261c"},
-                {"Shade","#B3000000"}, {"Card","#1a1e2b"}, {"CardText","#e6e8ef"}, {"Scroll","#3a4258"} } },
+                {"Shade","#B3000000"}, {"TourCard","#1a1e2b"}, {"TourText","#e6e8ef"}, {"Scroll","#3a4258"} } },
             { "light", new Dictionary<string, string> {
                 {"Bg","#f3f4f8"}, {"Rail","#2a3352"}, {"RailActive","#3b4670"}, {"RailIcon","#c4cbe0"}, {"RailAccent","#ffffff"},
                 {"Side","#ffffff"}, {"Panel","#ffffff"}, {"PanelHover","#f3f5fb"}, {"Input","#f6f7fb"},
@@ -43,7 +43,7 @@ namespace Hatpick
                 {"WinBg","#fff0e6"}, {"WinText","#8a3a0e"}, {"WinBorder","#f3c6a5"},
                 {"DotOk","#1f8a52"}, {"DotWarn","#b07800"}, {"DotErr","#c62f24"}, {"DotInfo","#2f5fc4"},
                 {"TintYellow","#fff3c9"}, {"TintRed","#fde4e4"}, {"TintDark","#e6e8ef"}, {"TintBlue","#e3ebff"}, {"TintBrown","#f1e6dc"},
-                {"Shade","#8C1D2233"}, {"Card","#1d2233"}, {"CardText","#ffffff"}, {"Scroll","#c4cad9"} } },
+                {"Shade","#8C1D2233"}, {"TourCard","#1d2233"}, {"TourText","#ffffff"}, {"Scroll","#c4cad9"} } },
         };
 
         public static void Init(Application app)

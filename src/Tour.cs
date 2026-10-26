@@ -69,20 +69,20 @@ namespace Hatpick
 
             // the card
             var body = new StackPanel();
-            body.Children.Add(Ui.Text(step.Title, 16, "CardText", FontWeights.SemiBold));
-            var text = Ui.Text(step.Body, 13.5, "CardText");
+            body.Children.Add(Ui.Text(step.Title, 16, "TourText", FontWeights.SemiBold));
+            var text = Ui.Text(step.Body, 13.5, "TourText");
             text.Opacity = 0.9;
             text.Margin = new Thickness(0, 6, 0, 14);
             body.Children.Add(text);
             var bar = new DockPanel();
-            var counter = Ui.Text((tourIndex + 1) + " of " + tourSteps.Count, 12, "CardText");
+            var counter = Ui.Text((tourIndex + 1) + " of " + tourSteps.Count, 12, "TourText");
             counter.Opacity = 0.7;
             counter.VerticalAlignment = VerticalAlignment.Center;
             DockPanel.SetDock(counter, Dock.Left);
             bar.Children.Add(counter);
             var btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
             var skip = Ui.Btn("Skip", EndTour, "BtnLink");
-            skip.SetResourceReference(Control.ForegroundProperty, "CardText");
+            skip.SetResourceReference(Control.ForegroundProperty, "TourText");
             var back = Ui.Btn("Back", delegate { tourIndex = Math.Max(0, tourIndex - 1); ShowTourStep(); }, "Btn");
             back.IsEnabled = tourIndex > 0;
             var next = Ui.Btn(tourIndex == tourSteps.Count - 1 ? "Done" : "Next", delegate { tourIndex++; if (tourIndex >= tourSteps.Count) EndTour(); else ShowTourStep(); }, "BtnPrimary");
@@ -91,7 +91,7 @@ namespace Hatpick
             bar.Children.Add(btns);
             body.Children.Add(bar);
             var card = new Border { Child = body, Padding = new Thickness(18, 16, 18, 14), CornerRadius = new CornerRadius(12), Width = 340, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
-            card.SetResourceReference(Border.BackgroundProperty, "Card");
+            card.SetResourceReference(Border.BackgroundProperty, "TourCard");
             card.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 24, ShadowDepth = 6, Opacity = 0.4 };
 
             // right of the target if it fits, else below, else above
