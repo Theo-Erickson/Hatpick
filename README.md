@@ -116,8 +116,10 @@ python tools\make-icon.py hatpick.ico hatpick.png
 | Tag | Version |
 |---|---|
 | `v1.0-gitpicker` | First version, named GitPicker |
-| `v1.1-hatpick` | Renamed to Hatpick (Gitpicky went to a separate project) |
-| `v1.2-hat-trick-icon` | Hat-trick icon |
+| `v1.1-gitpicky` | Renamed to Gitpicky |
+| `v1.2-pick-icon` | Guitar-pick icon |
+| `v1.3-hatpick` | Renamed to Hatpick (Gitpicky went to a separate project) |
+| `v1.4-hat-trick-icon` | Hat-trick icon |
 | `v2.0-analyzer` | Repo analyzer, reset, first-run setup, tour and help |
 | `v3.0-wpf` | New WPF interface with themes, hats everywhere, and commit author fixing |
 
