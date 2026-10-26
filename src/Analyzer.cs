@@ -16,6 +16,14 @@ namespace Hatpick
 
     enum RepoSource { Watched, Single, Opened }
 
+    // One row of "where each setting comes from": what a layer sets, and whether it wins.
+    class LayerRow
+    {
+        public string Layer;
+        public string Name = "", Email = "", Push = "";
+        public bool NameWins, EmailWins, PushWins;
+    }
+
     // What a repo commits and pushes as, where each setting comes from, and what's off.
     class RepoReport
     {
@@ -40,6 +48,7 @@ namespace Hatpick
         public bool LocalIdentity, LocalPush;
 
         public List<Issue> Issues = new List<Issue>();
+        public List<LayerRow> Layers = new List<LayerRow>();
         public Level Level { get { return Issues.Count == 0 ? Level.Ok : Issues.Max(i => i.Level); } }
 
         public string DisplayName { get { return System.IO.Path.GetFileName(Settings.Norm(Path)); } }
@@ -176,11 +185,41 @@ namespace Hatpick
                 var pe = PushEntry(entries, r);
                 if (pe != null) { r.PushUser = pe.Value; r.PushSetBy = SetBy(pe); r.LocalPush = pe.Scope == "local"; }
             }
+            Layers(r, entries, name, email);
+
             if (Git.GcmAvailable && r.PushUser.Length > 0)
                 r.SignedIn = gcm.Any(g => string.Equals(g, r.PushUser, StringComparison.OrdinalIgnoreCase));
 
             AddIssues(r, s, gcm);
             return r;
+        }
+
+        static string LayerOf(ConfigEntry e)
+        {
+            if (e.Scope == "local" || e.Scope == "worktree") return "This repo";
+            if (Git.IsOurInclude(e.Origin)) return "Folder default";
+            if (e.Scope == "global") return "Global";
+            if (e.Scope == "system") return "System";
+            return null;
+        }
+
+        static void Layers(RepoReport r, List<ConfigEntry> entries, ConfigEntry nameWin, ConfigEntry emailWin)
+        {
+            var pushWin = r.UrlUser.Length > 0 ? null : PushEntry(entries, r);
+            if (r.UrlUser.Length > 0)
+                r.Layers.Add(new LayerRow { Layer = "Remote URL", Push = r.UrlUser, PushWins = true });
+            foreach (var layer in new[] { "This repo", "Folder default", "Global", "System" })
+            {
+                var es = entries.Where(e => LayerOf(e) == layer).ToList();
+                var n = Last(es, "user.name"); var em = Last(es, "user.email"); var p = PushEntry(es, r);
+                if (layer == "System" && n == null && em == null && p == null) continue;
+                r.Layers.Add(new LayerRow
+                {
+                    Layer = layer,
+                    Name = n != null ? n.Value : "", Email = em != null ? em.Value : "", Push = p != null ? p.Value : "",
+                    NameWins = n != null && n == nameWin, EmailWins = em != null && em == emailWin, PushWins = p != null && p == pushWin
+                });
+            }
         }
 
         static void AddIssues(RepoReport r, Settings s, List<string> gcm)

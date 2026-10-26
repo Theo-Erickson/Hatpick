@@ -1,302 +1,254 @@
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Windows.Forms;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Shapes;
 
 namespace Hatpick
 {
-    // First-time setup: what Hatpick is, signing accounts in to Git Credential Manager,
-    // adding accounts, and choosing watched folders. Can be run again from Help.
-    class SetupWizard : Form
+    // First-time setup: what Hatpick is, signing in to Git Credential Manager, your hats,
+    // and your repo folders. Can be run again from Help.
+    class SetupWizard : ThemedWindow
     {
-        static int S(int px) { return Program.S(px); }
-
         readonly Settings settings;
-        readonly List<Func<Control>> pages = new List<Func<Control>>();
+        readonly List<Func<FrameworkElement>> pages = new List<Func<FrameworkElement>>();
         int page;
-        Panel host;
-        Label stepLabel;
-        Button back, next, cancel;
+        Border host;
+        StackPanel dots;
+        Button back, next, skip;
         List<string> gcm = new List<string>();
+        CheckBox tour, explorer;
+        bool finished;
 
-        public bool StartTour, AddExplorerMenu;
-
-        public SetupWizard(Settings settings)
+        SetupWizard(Window owner, Settings settings) : base(owner, "Set up Hatpick", 720)
         {
             this.settings = settings;
-            Text = "Set up Hatpick";
-            Font = Program.UiFont;
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
-            StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(S(700), S(500));
-            try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
+            SizeToContent = SizeToContent.Manual;
+            Height = 600;
+            gcm = Git.CredentialManagerAccounts();
 
-            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            Controls.Add(layout);
-            host = new Panel { Dock = DockStyle.Fill, Padding = new Padding(S(24), S(18), S(24), S(8)), Margin = Padding.Empty };
-            layout.Controls.Add(host);
-
-            var bar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, AutoSize = true, Padding = new Padding(S(16), S(10), S(16), S(12)), BackColor = SystemColors.ControlLight, Margin = Padding.Empty };
-            bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            for (int i = 0; i < 3; i++) bar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            stepLabel = new Label { AutoSize = true, Anchor = AnchorStyles.Left, ForeColor = SystemColors.GrayText };
-            cancel = new Button { Text = "Skip setup", AutoSize = true, Height = S(30), Margin = new Padding(0, 0, S(16), 0), TabIndex = 3 };
-            back = new Button { Text = "Back", Width = S(90), Height = S(30), TabIndex = 2 };
-            next = new Button { Text = "Next", Width = S(110), Height = S(30), TabIndex = 1 };
-            cancel.Click += delegate { DialogResult = DialogResult.Cancel; };
-            back.Click += delegate { Go(page - 1); };
-            next.Click += delegate { if (page == pages.Count - 1) Finish(); else Go(page + 1); };
-            bar.Controls.Add(stepLabel, 0, 0); bar.Controls.Add(cancel, 1, 0); bar.Controls.Add(back, 2, 0); bar.Controls.Add(next, 3, 0);
-            layout.Controls.Add(bar);
-            AcceptButton = next;
+            var root = new DockPanel();
+            var bar = new DockPanel { Margin = new Thickness(28, 12, 28, 20) };
+            dots = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            DockPanel.SetDock(dots, Dock.Left);
+            bar.Children.Add(dots);
+            var btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            skip = Ui.Btn("Skip setup", Close, "BtnGhost");
+            back = Ui.Btn("Back", delegate { Go(page - 1); });
+            next = Ui.Btn("Next", delegate { if (page == pages.Count - 1) Finish(); else Go(page + 1); }, "BtnPrimary");
+            next.IsDefault = true;
+            foreach (var b in new[] { skip, back, next }) { b.Margin = new Thickness(8, 0, 0, 0); b.MinWidth = 90; b.Height = 34; btns.Children.Add(b); }
+            bar.Children.Add(btns);
+            DockPanel.SetDock(bar, Dock.Bottom);
+            root.Children.Add(bar);
+            host = new Border { Padding = new Thickness(32, 26, 32, 8) };
+            root.Children.Add(new ScrollViewer { Content = host, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+            Content = root;
 
             pages.Add(Welcome);
             pages.Add(SignIn);
-            pages.Add(Accounts);
-            pages.Add(Folders);
+            pages.Add(HatsStep);
+            pages.Add(FoldersStep);
             pages.Add(Done);
-            Shown += delegate { Go(0); };
+            Go(0);
         }
 
         void Go(int i)
         {
             page = Math.Max(0, Math.Min(i, pages.Count - 1));
-            host.SuspendLayout();
-            foreach (Control c in host.Controls.Cast<Control>().ToList()) c.Dispose();
-            host.Controls.Clear();
-            var content = pages[page]();
-            content.Dock = DockStyle.Fill;
-            host.Controls.Add(content);
-            host.ResumeLayout();
-            stepLabel.Text = "Step " + (page + 1) + " of " + pages.Count;
-            back.Enabled = page > 0;
-            next.Text = page == pages.Count - 1 ? "Finish" : "Next";
-            cancel.Visible = page < pages.Count - 1;
-            next.Select();   // Enter always means Next, never Skip
-        }
-
-        // ---------- building blocks ----------
-
-        TableLayoutPanel Page(string heading, string intro)
-        {
-            var t = new TableLayoutPanel { ColumnCount = 1, AutoScroll = true };
-            t.Controls.Add(new Label { Text = heading, AutoSize = true, Font = new Font("Segoe UI", 15f, FontStyle.Bold), Margin = new Padding(0, 0, 0, S(8)) });
-            if (intro != null) t.Controls.Add(Para(intro));
-            return t;
-        }
-
-        Label Para(string text, bool gray = false)
-        {
-            return new Label
+            host.Child = pages[page]();
+            dots.Children.Clear();
+            for (int d = 0; d < pages.Count; d++)
             {
-                Text = text, AutoSize = true, MaximumSize = new Size(S(640), 0), Margin = new Padding(0, 0, 0, S(10)),
-                ForeColor = gray ? SystemColors.GrayText : SystemColors.ControlText
-            };
+                var e = new Ellipse { Width = 8, Height = 8, Margin = new Thickness(0, 0, 8, 0) };
+                e.SetResourceReference(Shape.FillProperty, d == page ? "Accent" : "Border");
+                dots.Children.Add(e);
+            }
+            back.IsEnabled = page > 0;
+            next.Content = page == pages.Count - 1 ? "Finish" : "Next";
+            skip.Visibility = page == pages.Count - 1 ? Visibility.Collapsed : Visibility.Visible;
+            next.Focus();
         }
 
-        static Button Btn(string text, Action onClick)
+        static StackPanel Page(string title, string intro)
         {
-            var b = new Button { Text = text, AutoSize = true, Height = Program.S(30), Margin = new Padding(0, 0, Program.S(8), 0) };
-            b.Click += delegate { onClick(); };
-            return b;
+            var sp = new StackPanel();
+            sp.Children.Add(Ui.Text(title, 24, "Text", FontWeights.Bold));
+            if (intro != null) { var t = Ui.Text(intro, 14, "Sub"); t.Margin = new Thickness(0, 8, 0, 18); sp.Children.Add(t); }
+            return sp;
         }
 
-        // ---------- pages ----------
-
-        Control Welcome()
+        FrameworkElement Welcome()
         {
-            var t = Page("Welcome to Hatpick",
-                "Hatpick picks which Git account each repo commits and pushes as - for example Work for your job's repos and " +
-                "Personal for your own - and shows you what any repo is set to and why.");
-            t.Controls.Add(Para(
-                "In the next few steps you'll:\n\n" +
-                "  1.  Check which GitHub accounts are signed in to Git Credential Manager\n" +
-                "  2.  Add your accounts (a commit name and email, plus a GitHub username)\n" +
-                "  3.  Choose the folders where you keep your repos, and a default account for each"));
-            var safe = Para(
-                "Hatpick never signs in and never sees a password or token. Your sign-ins stay in Git Credential Manager, which comes with Git for Windows. " +
-                "Hatpick only writes plain git settings that say which sign-in to use, and everything it changes can be reset.");
-            safe.Font = new Font("Segoe UI", 9.5f, FontStyle.Italic);
-            t.Controls.Add(safe);
-            t.Controls.Add(Para("You can run this setup again any time from Help.", true));
-            return t;
+            var sp = Page("Welcome to Hatpick", "Each of your GitHub accounts is a hat. Hatpick makes sure every repo wears the right one - for the name on your commits, and for the account you push with.");
+            var hats = Ui.Row(14, Hats.Tile("hardhat", 64), Hats.Tile("beanie", 64), Hats.Tile("tophat", 64));
+            hats.Margin = new Thickness(0, 0, 0, 20);
+            sp.Children.Add(hats);
+            sp.Children.Add(Ui.Text("In the next steps you'll:", 14, "Text", FontWeights.SemiBold));
+            foreach (var line in new[] { "Check which GitHub accounts are signed in to Git Credential Manager", "Make a hat for each account", "Pick the folders where you keep repos, and a default hat for each" })
+            {
+                var t = Ui.Row(10, Ui.Icon("check", 16, "Accent", 2.2), Ui.Text(line, 14, "Sub"));
+                t.Margin = new Thickness(0, 8, 0, 0);
+                sp.Children.Add(t);
+            }
+            var safe = Ui.Panel(Ui.Text("Hatpick never signs in and never sees a password or token. Your sign-ins stay in Git Credential Manager (part of Git for Windows); " +
+                "Hatpick only writes plain git settings that say which one to use, and everything it changes can be reset.", 13, "InfoText"), 14, "InfoBg", "InfoBorder", 10);
+            safe.Margin = new Thickness(0, 20, 0, 0);
+            sp.Children.Add(safe);
+            return sp;
         }
 
-        Control SignIn()
+        FrameworkElement SignIn()
         {
-            var t = Page("Sign in to Git Credential Manager",
-                "Git Credential Manager (GCM) keeps your GitHub sign-ins. Sign in every GitHub account you use once, and GCM remembers it.");
-            gcm = Git.CredentialManagerAccounts();
+            var sp = Page("Sign in your accounts", "Git Credential Manager keeps your GitHub sign-ins. Sign each account in once and it remembers it.");
             if (!Git.GcmAvailable)
             {
-                t.Controls.Add(Para("Git Credential Manager wasn't found. It comes with Git for Windows - install or update it from git-scm.com, then come back to this step. " +
-                                    "You can still finish setup now; pushes will just keep asking for a sign-in."));
-                t.Controls.Add(Btn("Check again", delegate { Go(page); }));
-                return t;
+                sp.Children.Add(Ui.Panel(Ui.Text("Git Credential Manager wasn't found. It comes with Git for Windows - install or update it from git-scm.com. You can still finish setup; pushes will just keep asking you to sign in.", 13, "WarnText"), 14, "WarnBg", "WarnBorder", 10));
+                return sp;
             }
-            t.Controls.Add(new Label { Text = "Signed in right now:", AutoSize = true, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), Margin = new Padding(0, S(4), 0, S(4)) });
-            var lb = new ListBox { Width = S(320), Height = S(90), IntegralHeight = false };
-            foreach (var g in gcm) lb.Items.Add(g);
-            if (gcm.Count == 0) lb.Items.Add("(none yet)");
-            t.Controls.Add(lb);
-            var row = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, S(10), 0, S(10)) };
-            row.Controls.Add(Btn("Sign in an account...", delegate
+            sp.Children.Add(Ui.Text("Signed in right now", 13, "Muted", FontWeights.SemiBold));
+            var list = new StackPanel { Margin = new Thickness(0, 8, 0, 16) };
+            if (gcm.Count == 0) list.Children.Add(Ui.Text("No accounts yet.", 14, "Sub"));
+            foreach (var g in gcm)
+            {
+                var r = Ui.Row(10, Ui.Icon("user", 18, "Muted"), Ui.MonoText(g, 14, "Text"));
+                r.Margin = new Thickness(0, 4, 0, 4);
+                list.Children.Add(r);
+            }
+            sp.Children.Add(list);
+            var row = Ui.Row(8, Ui.Btn("Sign in an account...", delegate
             {
                 try
                 {
                     var p = Git.StartGcmLogin();
                     p.EnableRaisingEvents = true;
-                    p.Exited += delegate { try { BeginInvoke((Action)delegate { if (!IsDisposed) Go(page); }); } catch { } };
+                    p.Exited += delegate { Dispatcher.BeginInvoke((Action)delegate { gcm = Git.CredentialManagerAccounts(); if (page == 1) Go(1); }); };
                 }
-                catch (Exception e) { MessageBox.Show(this, "Couldn't start Git Credential Manager:\n" + e.Message, Program.Title); }
-            }));
-            row.Controls.Add(Btn("Refresh", delegate { Go(page); }));
-            t.Controls.Add(row);
-            t.Controls.Add(Para(
-                "\"Sign in an account\" opens a small console window and your browser, where you sign in to GitHub. When the console closes, " +
-                "the list above updates. Do it once for each account. If an account is already listed, you can skip this step.", true));
-            return t;
+                catch (Exception e) { Dialogs.Info(this, "Couldn't start Git Credential Manager", e.Message); }
+            }), Ui.Btn("Refresh", delegate { gcm = Git.CredentialManagerAccounts(); Go(1); }));
+            sp.Children.Add(row);
+            var note = Ui.Text("\"Sign in an account\" opens a small console window and your browser. When the console closes, this list updates. Do it once per account; if an account is already listed, skip ahead.", 12.5, "Muted");
+            note.Margin = new Thickness(0, 12, 0, 0);
+            sp.Children.Add(note);
+            return sp;
         }
 
-        Control Accounts()
+        FrameworkElement HatsStep()
         {
-            var t = Page("Add your accounts",
-                "An account is who you commit and push as. Use the email that's on that GitHub account (GitHub > Settings > Emails), " +
-                "or its private noreply address, so GitHub credits your commits.");
-            var lv = new ListView { View = View.Details, FullRowSelect = true, HideSelection = false, Width = S(640), Height = S(170), MultiSelect = false };
-            lv.Columns.Add("Label", S(100)); lv.Columns.Add("Commit name", S(150)); lv.Columns.Add("Commit email", S(220)); lv.Columns.Add("GitHub username", S(150));
-            Action fill = delegate
+            var sp = Page("Make your hats", "One hat per account. Use the email that's on that GitHub account so GitHub credits your commits.");
+            foreach (var a in settings.accounts)
             {
-                lv.Items.Clear();
-                foreach (var a in settings.accounts)
-                {
-                    var i = new ListViewItem(a.label);
-                    i.SubItems.Add(a.name); i.SubItems.Add(a.email); i.SubItems.Add(a.github);
-                    lv.Items.Add(i);
-                }
-            };
-            fill();
-            t.Controls.Add(lv);
-            var row = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, S(8), 0, S(8)) };
-            var missing = gcm.Where(g => settings.AccountByGitHub(g) == null).ToList();
-            if (missing.Count > 0)
-                row.Controls.Add(Btn("Add from signed-in accounts (" + missing.Count + ")...", delegate
-                {
-                    foreach (var g in gcm.Where(x => settings.AccountByGitHub(x) == null).ToList())
-                    {
-                        var a = new Account { label = g, name = g, email = "", github = g };
-                        if (AccountEditor.Edit(this, a, settings.accounts, null)) settings.accounts.Add(a);
-                    }
-                    fill();
-                }));
-            row.Controls.Add(Btn("Add...", delegate
+                var acct = a;
+                var row = new DockPanel();
+                var tile = Hats.Tile(a.hat, 44);
+                tile.Margin = new Thickness(0, 0, 12, 0);
+                DockPanel.SetDock(tile, Dock.Left);
+                row.Children.Add(tile);
+                var btns = Ui.Row(6, Ui.Btn("Edit", delegate { AccountEditor.Edit(this, acct, settings.accounts, acct, gcm); Go(page); }),
+                    Ui.Btn("Remove", delegate { settings.accounts.Remove(acct); foreach (var f in settings.folders.Where(f => f.account == acct.label)) f.account = ""; Go(page); }, "BtnGhost"));
+                btns.VerticalAlignment = VerticalAlignment.Center;
+                DockPanel.SetDock(btns, Dock.Right);
+                row.Children.Add(btns);
+                var info = Ui.Stack(2, Ui.Text(a.label, 15, "Text", FontWeights.SemiBold), Ui.MonoText(a.email + (string.IsNullOrEmpty(a.github) ? "" : "  ·  " + a.github), 12, "Muted"));
+                info.VerticalAlignment = VerticalAlignment.Center;
+                row.Children.Add(info);
+                var p = Ui.Panel(row, 12);
+                p.Margin = new Thickness(0, 0, 0, 8);
+                sp.Children.Add(p);
+            }
+            var actions = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
+            foreach (var g in gcm.Where(g => settings.AccountByGitHub(g) == null))
             {
-                var a = new Account { label = "", name = "", email = "", github = "" };
-                if (AccountEditor.Edit(this, a, settings.accounts, null)) { settings.accounts.Add(a); fill(); }
-            }));
-            row.Controls.Add(Btn("Edit...", delegate
-            {
-                if (lv.SelectedIndices.Count == 0) return;
-                var a = settings.accounts[lv.SelectedIndices[0]];
-                string old = a.label;
-                if (AccountEditor.Edit(this, a, settings.accounts, a))
-                {
-                    foreach (var f in settings.folders.Where(f => f.account == old)) f.account = a.label;
-                    fill();
-                }
-            }));
-            row.Controls.Add(Btn("Remove", delegate
-            {
-                if (lv.SelectedIndices.Count == 0) return;
-                var a = settings.accounts[lv.SelectedIndices[0]];
-                settings.accounts.Remove(a);
-                foreach (var f in settings.folders.Where(f => f.account == a.label)) f.account = "";
-                fill();
-            }));
-            t.Controls.Add(row);
-            t.Controls.Add(Para("Tip: the label is just for you - Work and Personal are a good start.", true));
-            return t;
+                var user = g;
+                var b = Ui.IconBtn(Ui.Icon("plus", 14, "Text"), "Make a hat for " + user, delegate { Add(user); });
+                b.Margin = new Thickness(0, 0, 8, 8);
+                actions.Children.Add(b);
+            }
+            var add = Ui.IconBtn(Ui.Icon("plus", 14, "Text"), "Add a hat", delegate { Add(null); });
+            add.Margin = new Thickness(0, 0, 8, 8);
+            actions.Children.Add(add);
+            sp.Children.Add(actions);
+            return sp;
         }
 
-        Control Folders()
+        void Add(string github)
         {
-            var t = Page("Choose your repo folders",
-                "Watch the folders where you keep repos. Hatpick lists every repo inside them, and a folder's default account applies to all of " +
-                "them - including repos you clone or create there later.");
-            t.Controls.Add(Para("Repos that live somewhere else can be added one at a time later, with Add > Add a single repo. " +
-                                "A repo's own setting always beats its folder default.", true));
-            string gh = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "GitHub");
-            if (settings.folders.Count == 0 && Directory.Exists(gh))
-                settings.folders.Add(new WatchedFolder { path = gh, account = "" });   // GitHub Desktop's default location
-
-            var lv = new ListView { View = View.Details, FullRowSelect = true, HideSelection = false, Width = S(640), Height = S(150), MultiSelect = false };
-            lv.Columns.Add("Folder", S(440)); lv.Columns.Add("Default account", S(180));
-            Action fill = delegate
-            {
-                lv.Items.Clear();
-                foreach (var f in settings.folders)
-                {
-                    var i = new ListViewItem(f.path);
-                    i.SubItems.Add(string.IsNullOrEmpty(f.account) ? "(none)" : f.account);
-                    lv.Items.Add(i);
-                }
-            };
-            fill();
-            t.Controls.Add(lv);
-            var row = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, S(8), 0, S(8)) };
-            row.Controls.Add(Btn("Watch a folder...", delegate
-            {
-                string p = FoldersForm.PickFolder(this, "Pick a folder that holds your repos");
-                if (p != null && FoldersForm.AddWatched(this, settings, p)) fill();
-            }));
-            Action setDefault = delegate
-            {
-                if (lv.SelectedIndices.Count == 0) return;
-                var f = settings.folders[lv.SelectedIndices[0]];
-                string pick;
-                if (PickAccount.Ask(this, "Default account for every repo in\n" + f.path, settings.accounts, f.account, out pick)) { f.account = pick; fill(); }
-            };
-            lv.DoubleClick += delegate { setDefault(); };
-            row.Controls.Add(Btn("Default account...", setDefault));
-            row.Controls.Add(Btn("Stop watching", delegate
-            {
-                if (lv.SelectedIndices.Count == 0) return;
-                settings.folders.RemoveAt(lv.SelectedIndices[0]);
-                fill();
-            }));
-            t.Controls.Add(row);
-            return t;
+            var a = new Account { label = github ?? "", name = github ?? "", email = "", github = github ?? "", hat = HatKinds.DefaultFor(settings.accounts.Count) };
+            if (AccountEditor.Edit(this, a, settings.accounts, null, gcm)) settings.accounts.Add(a);
+            Go(page);
         }
 
-        CheckBox tour, explorer;
-
-        Control Done()
+        FrameworkElement FoldersStep()
         {
-            var t = Page("You're set", null);
+            var sp = Page("Pick your repo folders", "Watch the folders where you keep repos. Every repo inside is listed, and a folder's default hat applies to all of them - including repos you clone there later.");
+            string gh = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "GitHub");
+            if (settings.folders.Count == 0 && Directory.Exists(gh)) settings.folders.Add(new WatchedFolder { path = gh, account = "" });
+            foreach (var f in settings.folders)
+            {
+                var folder = f;
+                var choices = new List<Ui.Choice> { new Ui.Choice { Value = "", Label = "No default hat" } };
+                foreach (var a in settings.accounts) choices.Add(new Ui.Choice { Value = a.label, Label = a.label, Sub = a.email, Hat = a.hat });
+                var row = new DockPanel();
+                var right = Ui.Row(6, Ui.Picker(choices, f.account ?? "", v => folder.account = v, 200),
+                    Ui.Btn("Remove", delegate { settings.folders.Remove(folder); Go(page); }, "BtnGhost"));
+                right.VerticalAlignment = VerticalAlignment.Center;
+                DockPanel.SetDock(right, Dock.Right);
+                row.Children.Add(right);
+                row.Children.Add(Ui.Row(10, Ui.Icon("folder", 20, "Muted"), Ui.MonoText(f.path, 12.5, "Text")));
+                var p = Ui.Panel(row, 12);
+                p.Margin = new Thickness(0, 0, 0, 8);
+                sp.Children.Add(p);
+            }
+            var add = Ui.IconBtn(Ui.Icon("plus", 14, "Text"), "Watch a folder", delegate
+            {
+                var path = FolderPicker.Pick(this, "Pick a folder that holds your repos");
+                if (path != null && !settings.folders.Any(x => Settings.SamePath(x.path, path))) settings.folders.Add(new WatchedFolder { path = Settings.Norm(path), account = "" });
+                Go(page);
+            });
+            add.HorizontalAlignment = HorizontalAlignment.Left;
+            add.Margin = new Thickness(0, 8, 0, 0);
+            sp.Children.Add(add);
+            var note = Ui.Text("Repos that live somewhere else can be added one at a time later, from Folders.", 12.5, "Muted");
+            note.Margin = new Thickness(0, 12, 0, 0);
+            sp.Children.Add(note);
+            return sp;
+        }
+
+        FrameworkElement Done()
+        {
             int defaults = settings.folders.Count(f => !string.IsNullOrEmpty(f.account));
-            t.Controls.Add(Para(
-                settings.accounts.Count + " account(s), " + settings.folders.Count + " watched folder(s)" +
-                (defaults > 0 ? ", " + defaults + " with a default account." : ".") + "\n\n" +
-                "Next, Hatpick scans your folders and shows each repo with a status dot. Pick a repo to see who it commits and pushes as, " +
-                "and change it if you need to. Look for the ? buttons whenever something isn't clear."));
-            tour = new CheckBox { Text = "Show me around the window (about a minute)", AutoSize = true, Checked = true, Margin = new Padding(0, S(6), 0, S(4)) };
-            explorer = new CheckBox { Text = "Add \"Analyze with Hatpick\" to Explorer's right-click menu for folders", AutoSize = true, Checked = ExplorerMenu.Installed };
-            t.Controls.Add(tour);
-            t.Controls.Add(explorer);
-            t.Controls.Add(Para("The right-click entry is per-user and needs no admin rights. You can turn it off later under Options.", true));
-            return t;
+            var sp = Page("You're set", settings.accounts.Count + " hat(s), " + settings.folders.Count + " watched folder(s)" + (defaults > 0 ? ", " + defaults + " with a default hat." : ".") +
+                " Next, Hatpick scans your folders and shows which hat each repo wears. Look for the ? buttons whenever something isn't clear.");
+            tour = new CheckBox { Content = "Show me around (about a minute)", IsChecked = true, Margin = new Thickness(0, 0, 0, 12) };
+            explorer = new CheckBox { Content = "Add \"Analyze with Hatpick\" to Explorer's right-click menu for folders", IsChecked = ExplorerMenu.Installed };
+            sp.Children.Add(tour);
+            sp.Children.Add(explorer);
+            var note = Ui.Text("The right-click entry is per-user and needs no admin rights. You can change it later on the Folders page.", 12.5, "Muted");
+            note.Margin = new Thickness(0, 8, 0, 0);
+            sp.Children.Add(note);
+            return sp;
         }
 
         void Finish()
         {
-            StartTour = tour != null && tour.Checked;
-            AddExplorerMenu = explorer != null && explorer.Checked;
-            DialogResult = DialogResult.OK;
+            try
+            {
+                if (explorer.IsChecked == true && !ExplorerMenu.Installed) ExplorerMenu.Install(Program.ExePath);
+                else if (explorer.IsChecked != true && ExplorerMenu.Installed) ExplorerMenu.Remove();
+            }
+            catch { }
+            finished = true;
+            Close();
+        }
+
+        public static bool Run(Window owner, Settings settings, out bool startTour)
+        {
+            var w = new SetupWizard(owner, settings);
+            w.ShowDialog();
+            startTour = w.finished && w.tour != null && w.tour.IsChecked == true;
+            return w.finished;
         }
     }
 }

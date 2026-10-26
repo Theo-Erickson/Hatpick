@@ -1,126 +1,111 @@
 # Hatpick
 
-Pick which Git account each repo commits and pushes as, e.g. work and personal
-on the same machine, and see at a glance what any repo is set to and why.
-The name is a nod to a hat trick: each account is a hat, and Hatpick picks which
-one each repo wears.
+Each of your GitHub accounts is a **hat**. Hatpick makes sure every repo wears the
+right one - for the name on your commits and for the account you push with - shows
+why a repo wears what it wears, and can fix the author of commits before (or after)
+you push. The name is a nod to a hat trick.
 
 ## No sign-in, no secrets
 
-Hatpick never asks for a password or token and never sees one. Your GitHub
-sign-ins live in **Git Credential Manager** (GCM), which ships with Git for
-Windows. Hatpick only writes plain settings that tell git *which* saved sign-in
-to use:
+Hatpick never asks for a password or token and never sees one. Your GitHub sign-ins
+live in **Git Credential Manager** (GCM), which ships with Git for Windows. Hatpick
+only writes plain git settings that say *which* sign-in to use:
 
 ```
 user.name / user.email                       who commits are authored by
 credential.https://github.com.username       which GCM sign-in is used to push
 ```
 
-When you push, git passes that username to GCM, and GCM picks the matching
-saved sign-in instead of showing its "Select an account" window. Hatpick reads
-the list of signed-in account *names* (`git credential-manager github list`) and
-never runs `git credential fill`, the command that would return a token.
-
-## Getting started
-
-The first time Hatpick opens, a short setup walks you through:
-
-1. **Signing in to Git Credential Manager.** It lists the GitHub accounts GCM
-   already has, and *Sign in an account* runs GCM's own sign-in (a console window
-   plus your browser) for any that are missing. You can also do this from Git
-   Bash, once per account:
-   ```
-   git credential-manager github login
-   ```
-2. **Adding your accounts.** *Add from signed-in accounts* fills in the GitHub
-   usernames; you add the commit email for each.
-3. **Choosing watched folders** and a default account for each.
-
-At the end it offers a one-minute tour of the window and the Explorer
-right-click entry. Both setup and the tour can be run again from **? Help**.
-
-The **?** buttons next to each part of the report, the repo list and the
-"Set this repo" box explain what that line means. **? Help** also has short
-explainers on how Hatpick works, watched folders vs. single repos, the status
-dots and resetting.
+It reads the list of signed-in account *names* (`git credential-manager github list`)
+and never runs `git credential fill`, the command that would return a token.
 
 ## The window
 
-**Left:** your repos, grouped by where they come from, with a status dot:
+A slim rail on the left switches pages; theme and help sit at the bottom.
 
-| Dot | Meaning |
-|---|---|
-| Green | All set |
-| Blue | Fine, with notes (e.g. SSH remote, repo owned by an organization) |
-| Yellow | Needs attention (e.g. GCM will ask which account, or commits and pushes use different accounts) |
-| Red | Not set up (no commit identity, so commits fail) |
+- **Overview** - your hats, a *Needs attention* list with one-click fixes, and every
+  repo as a card showing the hat it commits with and the hat it pushes with. Two
+  different hats means they don't match; a dashed circle means no hat.
+- **Repos** - one repo in detail: who it commits and pushes as, a *Where each setting
+  comes from* table (this repo, folder default, global - the winning value is
+  highlighted), hat pickers, and its recent commits.
+- **Hats** - add, edit and remove hats (label, commit name and email, GitHub username,
+  and a hat picture), plus which accounts are signed in to GCM.
+- **Folders** - watched folders and their default hats, single repos, and the optional
+  Explorer right-click entry.
+- **Reset** - undo everything Hatpick changed.
 
-**Right:** the report for the selected repo: its remote, who it **commits as**,
-who it **pushes as**, where each setting comes from (*This repo*, *Folder
-default*, *Your global settings*, *The remote URL*), whether GCM has a sign-in
-for that account, and whether Hatpick has changed the repo. Below that you can
-set the repo's commit and push accounts.
+Every section has a **?** button explaining it. First launch runs a short setup, and
+**Help** can rerun it or take the one-minute tour. Dark and light themes are built in;
+each theme is just a palette in `Theme.cs`, so adding another is one more palette.
 
 ## Watched folders vs. single repos
 
-- **Watched folders** are folders that hold your repos, like `Documents\GitHub`.
-  Hatpick lists every repo inside (up to 4 levels deep, skipping build folders
-  like `Intermediate`, `Saved` and `node_modules`). Give a watched folder a
-  **default account** and every repo in it uses that account, *including repos
-  you clone or create there later*. This works through an
-  `[includeIf "gitdir/i:<folder>/"]` entry in your global `.gitconfig` that
-  points at `~/.hatpick/<account>.gitconfig`.
-- **Single repos** are repos that live somewhere else. Add them one at a time;
-  they don't get a folder default, so set their account directly.
-- **Analyzing** a folder (drag it onto the window, *Add > Analyze any folder*, or
-  the Explorer right-click menu) shows its report without adding it to your list.
-  *Keep in list* turns it into a single repo.
+- **Watched folders** hold your repos, like `Documents\GitHub`. Every repo inside is
+  listed (up to 4 levels deep, skipping build folders such as `Intermediate`, `Saved`
+  and `node_modules`). A folder's **default hat** applies to every repo in it,
+  including repos you clone or create there later, through an
+  `[includeIf "gitdir/i:<folder>/"]` entry in your global `.gitconfig` that points at
+  `~/.hatpick/<hat>.gitconfig`.
+- **Single repos** live somewhere else; you pick their hat directly.
+- **Analyzing** any folder (drop it on the window, *Folders > Analyze a folder*, the
+  command line or the Explorer entry) shows it without adding it; *Keep in list* adds it.
 
-A repo's own setting always wins over its folder default, and the folder default
-wins over your global settings.
+A repo's own setting beats its folder default, which beats your global settings.
+
+## Fixing commits
+
+On a repo's page, the **Commits** section lists recent commits on the current branch
+with their author's hat, any `Co-authored-by` lines, and whether each is **Local** or
+**Pushed**. If commits you haven't pushed yet are authored by a different hat than the
+repo wears, Hatpick offers to fix them before you push.
+
+Select commits, choose a new author and/or *Remove co-authors*, and Hatpick shows what
+it's about to do before doing it:
+
+- **Blocks** it if you have uncommitted changes, a rebase or merge is in progress,
+  you're not on a branch, or the commits include a merge.
+- **Warns** (and asks you to confirm) when commits are already pushed (you'll need to
+  force push, and anyone who pulled must reset), when other people's commits sit on
+  top of yours (they get new IDs), when you'd take credit for someone else's commit,
+  when it's the default branch, when signed commits would lose their signatures, and
+  when the commits are on other branches too.
+
+It saves a backup ref (`refs/hatpick/backup/<branch>/<time>`) first, rewrites the
+commits with the same files, and moves the branch - your working folder doesn't
+change. **Undo last rewrite** puts the branch back exactly. Hatpick never pushes: use
+*Force push* in GitHub Desktop (or `git push --force-with-lease`) for commits that
+were already pushed.
 
 ## Resetting
 
-The first time Hatpick changes a repo, it saves what the repo had set itself
-(in a `[hatpick]` section of that repo's `.git/config`).
-
-- **Reset this repo** puts back exactly what was there before and removes the
-  `[hatpick]` section.
-- **Reset > Reset everything Hatpick changed...** does that for every repo it
-  changed, and can also remove all folder defaults from your global `.gitconfig`.
-
-Commits, branches and GCM sign-ins are never touched.
-
-## Other ways in
-
-- `Hatpick.exe <folder>` opens straight to that folder's report. If Hatpick is
-  already open, it switches to that folder.
-- **Options > Add "Analyze with Hatpick" to Explorer's right-click menu** adds a
-  per-user entry (no admin rights needed). On Windows 11 it's under *Show more
-  options*.
+The first time Hatpick changes a repo's settings it saves what the repo had (in a
+`[hatpick]` section of that repo's `.git/config`). *Reset this repo* puts that back
+exactly; the **Reset** page does it for every repo at once and can remove all folder
+defaults. Commits, branches and GCM sign-ins are never touched.
 
 ## GitHub Desktop
 
-GitHub Desktop uses each repo's commit name and email, so commits are authored by
-the right account. When it **pushes** to github.com, though, it uses the account
-you're signed into in Desktop (File > Options > Accounts), not GCM. If a repo
-belongs to the other account, push it from Git Bash (`git push`, which goes
-through GCM and picks the right account), or add Desktop's account as a
-collaborator on that repo.
+GitHub Desktop uses each repo's commit name and email. When it **pushes** to github.com
+it uses the account you're signed into in Desktop, not GCM, so for a repo that belongs
+to your other account, push from Git Bash (`git push` goes through GCM) or add Desktop's
+account as a collaborator.
+
+## If something goes wrong
+
+Unexpected errors are written to `hatpick-error.log` next to `Hatpick.exe`, and the
+message says so.
 
 ## Building
 
 `src\build.cmd` compiles every `.cs` file in `src` into `Hatpick.exe` with the C#
-compiler that ships with Windows (.NET Framework 4.x), so there's nothing to
-install. Close Hatpick before rebuilding. Stick to C# 5 syntax, because that's the
-newest version this compiler understands.
+compiler that ships with Windows (.NET Framework 4.x, WPF), so there's nothing to
+install. Close Hatpick before rebuilding, and stick to C# 5 syntax. Control looks are
+XAML in `Styles.cs`, loaded at startup; colors are theme brushes in `Theme.cs`.
 
-`hatpick.ico` is drawn by `tools\make-icon.py` (needs Python with Pillow 10.1+).
-At 64px and up it shows a "hat trick": a branch splitting three ways, with a hard
-hat (work), a top hat and a beanie (personal) on the tips. At 48px and below,
-which covers the Start menu and taskbar, it shows just the two-way fork with the
-hard hat and the beanie, so each hat stays readable.
+`hatpick.ico` is drawn by `tools\make-icon.py` (Python with Pillow 10.1+). At 64px and
+up it shows the hat trick (hard hat, top hat, beanie); at 48px and below, which covers
+the Start menu and taskbar, just the hard hat and the beanie.
 
 ```powershell
 python tools\make-icon.py hatpick.ico hatpick.png
@@ -128,14 +113,13 @@ python tools\make-icon.py hatpick.ico hatpick.png
 
 ## History
 
-Each milestone is tagged:
-
 | Tag | Version |
 |---|---|
 | `v1.0-gitpicker` | First version, named GitPicker |
 | `v1.1-hatpick` | Renamed to Hatpick (Gitpicky went to a separate project) |
 | `v1.2-hat-trick-icon` | Hat-trick icon |
 | `v2.0-analyzer` | Repo analyzer, reset, first-run setup, tour and help |
+| `v3.0-wpf` | New WPF interface with themes, hats everywhere, and commit author fixing |
 
 To get any version as its own folder:
 

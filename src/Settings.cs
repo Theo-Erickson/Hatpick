@@ -13,6 +13,14 @@ namespace Hatpick
         public string name { get; set; }     // git user.name
         public string email { get; set; }    // git user.email
         public string github { get; set; }   // GitHub username Git Credential Manager signs in as
+        public string hat { get; set; }      // picture: hardhat, beanie, tophat, cap, bowler
+    }
+
+    // The hat pictures an account can wear (drawn in Ui.cs).
+    static class HatKinds
+    {
+        public static readonly string[] All = { "hardhat", "beanie", "tophat", "cap", "bowler" };
+        public static string DefaultFor(int index) { return All[index % All.Length]; }
     }
 
     // A folder Hatpick watches: every repo inside it is listed, and it can have a
@@ -30,6 +38,7 @@ namespace Hatpick
         public List<string> repos { get; set; }            // single repos added on their own
         public List<string> managed { get; set; }          // repos Hatpick has written settings into
         public bool setupDone { get; set; }
+        public string theme { get; set; }                  // "dark" or "light"
 
         static readonly string Here = AppDomain.CurrentDomain.BaseDirectory;
         public static readonly string FilePath = Path.Combine(Here, "hatpick.json");
@@ -57,6 +66,9 @@ namespace Hatpick
             if (s.folders == null) s.folders = new List<WatchedFolder>();
             if (s.repos == null) s.repos = new List<string>();
             if (s.managed == null) s.managed = new List<string>();
+            if (s.theme != "light") s.theme = "dark";
+            for (int i = 0; i < s.accounts.Count; i++)
+                if (string.IsNullOrEmpty(s.accounts[i].hat)) s.accounts[i].hat = HatKinds.DefaultFor(i);
             return s;
         }
 

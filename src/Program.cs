@@ -1,22 +1,22 @@
 // Hatpick
-// Picks which Git account each repo commits and pushes as, and explains what any
-// repo is set to and why. It never signs in or sees a password or token: Git
-// Credential Manager keeps the sign-ins, Hatpick only says which one to use.
+// Picks which Git account (hat) each repo commits and pushes as, explains what any
+// repo is set to and why, and can fix the author of commits before or after pushing.
+// It never signs in or sees a password or token: Git Credential Manager keeps the
+// sign-ins, Hatpick only says which one to use.
 //
 // Build with build.cmd (uses the C# compiler that ships with Windows). C# 5 only.
 
 using System;
-using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
-using System.Windows.Forms;
+using System.Windows;
 
 [assembly: System.Reflection.AssemblyTitle("Hatpick")]
 [assembly: System.Reflection.AssemblyProduct("Hatpick")]
 [assembly: System.Reflection.AssemblyDescription("Pick which Git account each repo commits and pushes as")]
-[assembly: System.Reflection.AssemblyVersion("2.0.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("2.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("3.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("3.0.0.0")]
 
 namespace Hatpick
 {
@@ -24,23 +24,21 @@ namespace Hatpick
     {
         public const string Title = "Hatpick";
         public const int WM_COPYDATA = 0x004A;
-        public static float Scale = 1f;
-        public static int S(int px) { return (int)Math.Round(px * Scale); }
-        public static readonly Font UiFont = new Font("Segoe UI", 9.5f);
 
         [StructLayout(LayoutKind.Sequential)]
         public struct COPYDATASTRUCT { public IntPtr dwData; public int cbData; public IntPtr lpData; }
 
-        [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
-        [DllImport("user32.dll")] static extern IntPtr FindWindow(string cls, string title);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindow(string cls, string title);
         [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr hwnd, int cmd);
         [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr hwnd);
         [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr hwnd, int msg, IntPtr wParam, ref COPYDATASTRUCT lParam);
 
+        public static string ExePath { get { return System.Reflection.Assembly.GetExecutingAssembly().Location; } }
+        public static string LogPath { get { return Path.Combine(Path.GetDirectoryName(ExePath), "hatpick-error.log"); } }
+
         [STAThread]
         static void Main(string[] args)
         {
-            try { SetProcessDPIAware(); } catch { }
             string openPath = args.Length > 0 ? args[0].Trim().Trim('"') : null;
             bool first;
             using (var mutex = new Mutex(true, "Hatpick.SingleInstance", out first))
@@ -56,17 +54,40 @@ namespace Hatpick
                     }
                     return;
                 }
-                Application.EnableVisualStyles();
-                Application.SetCompatibleTextRenderingDefault(false);
-                using (var g = Graphics.FromHwnd(IntPtr.Zero)) Scale = g.DpiX / 96f;
-                if (Git.Exe == null)
+                var app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
+                app.DispatcherUnhandledException += (s, e) =>
                 {
-                    MessageBox.Show("Couldn't find git.exe.\n\nInstall Git for Windows (git-scm.com), then open Hatpick again.",
-                        Title, MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
+                    Report(e.Exception);
+                    e.Handled = true;
+                };
+                try
+                {
+                    if (Git.Exe == null)
+                    {
+                        MessageBox.Show("Couldn't find git.exe.\n\nInstall Git for Windows (git-scm.com), then open Hatpick again.",
+                            Title, MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+                    var settings = Settings.Load();
+                    Theme.Current = settings.theme;
+                    Theme.Init(app);
+                    var w = new MainWindow(settings, openPath);
+                    app.Run(w);
                 }
-                Application.Run(new MainForm(openPath));
+                catch (Exception e)
+                {
+                    Report(e);
+                }
             }
+        }
+
+        // Anything unexpected: write it next to the .exe and say where, so it can be fixed.
+        public static void Report(Exception e)
+        {
+            string text = DateTime.Now + "\n" + e + "\n\n";
+            try { File.AppendAllText(LogPath, text); } catch { }
+            MessageBox.Show("Something went wrong:\n\n" + e.Message + "\n\nDetails were saved to:\n" + LogPath,
+                Title, MessageBoxButton.OK, MessageBoxImage.Error);
         }
 
         static void SendPath(IntPtr hwnd, string path)
@@ -85,7 +106,5 @@ namespace Hatpick
             var cds = (COPYDATASTRUCT)Marshal.PtrToStructure(lParam, typeof(COPYDATASTRUCT));
             return Marshal.PtrToStringUni(cds.lpData);
         }
-
-        public static string ExePath { get { return Application.ExecutablePath; } }
     }
 }
