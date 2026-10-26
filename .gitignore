@@ -1,0 +1,5 @@
+# Build output
+*.exe
+
+# Per-machine state (your accounts and folders)
+gitpicker.json
