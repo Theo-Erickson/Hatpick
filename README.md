@@ -70,7 +70,11 @@ Windows (.NET Framework 4.x), so there's nothing to install. Close Hatpick befor
 rebuilding. Stick to C# 5 syntax, because that's the newest version this compiler
 understands.
 
-`hatpick.ico` is drawn by `tools\make-icon.py` (needs Python with Pillow 10.1+):
+`hatpick.ico` is drawn by `tools\make-icon.py` (needs Python with Pillow 10.1+).
+At 64px and up it shows a "hat trick": a branch splitting three ways, with a hard
+hat (work), a top hat and a beanie (personal) on the tips. At 48px and below,
+which covers the Start menu and taskbar, it shows just the two-way fork with the
+hard hat and the beanie, so each hat stays readable.
 
 ```powershell
 python tools\make-icon.py hatpick.ico hatpick.png
@@ -84,6 +88,7 @@ Each milestone is tagged:
 |---|---|
 | `v1.0-gitpicker` | First version, named GitPicker |
 | `v1.1-hatpick` | Renamed to Hatpick (Gitpicky went to a separate project) |
+| `v1.2-hat-trick-icon` | Hat-trick icon |
 
 To get any version as its own folder:
 
