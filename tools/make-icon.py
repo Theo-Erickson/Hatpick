@@ -1,5 +1,5 @@
-# Draws gitpicker.ico: a white branch graph on a green badge.
-#   python tools/make-icon.py gitpicker.ico gitpicker.png
+# Draws hatpick.ico: a white branch graph on a green badge.
+#   python tools/make-icon.py hatpick.ico hatpick.png
 # Needs Pillow 10.1+ (pip install pillow).
 import sys
 from PIL import Image, ImageDraw

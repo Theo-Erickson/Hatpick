@@ -1,14 +1,14 @@
-// GitPicker
+// Hatpick
 // Picks which Git account each repo commits and pushes as.
 //
 // - Per repo: writes user.name, user.email and credential.https://github.com.username
 //   into that repo's own .git/config. GitHub Desktop and command-line git both use them.
-// - Per folder: a scan folder can have a default account. GitPicker writes an
+// - Per folder: a scan folder can have a default account. Hatpick writes an
 //   [includeIf "gitdir/i:<folder>/"] entry into your global .gitconfig pointing at
-//   ~/.gitpicker/<account>.gitconfig, so every repo in that folder - including ones you
+//   ~/.hatpick/<account>.gitconfig, so every repo in that folder - including ones you
 //   create later - uses that account unless the repo has its own setting.
 //
-// Settings live in gitpicker.json next to the .exe.
+// Settings live in hatpick.json next to the .exe.
 // Build with build.cmd (uses the C# compiler that ships with Windows). C# 5 only.
 
 using System;
@@ -24,19 +24,19 @@ using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
-[assembly: System.Reflection.AssemblyTitle("GitPicker")]
-[assembly: System.Reflection.AssemblyProduct("GitPicker")]
+[assembly: System.Reflection.AssemblyTitle("Hatpick")]
+[assembly: System.Reflection.AssemblyProduct("Hatpick")]
 [assembly: System.Reflection.AssemblyDescription("Pick which Git account each repo uses")]
 [assembly: System.Reflection.AssemblyVersion("1.0.0.0")]
 [assembly: System.Reflection.AssemblyFileVersion("1.0.0.0")]
 
-namespace GitPicker
+namespace Hatpick
 {
     // ---------- settings ----------
 
     public class Account
     {
-        public string label { get; set; }    // what you see in GitPicker, e.g. "Work"
+        public string label { get; set; }    // what you see in Hatpick, e.g. "Work"
         public string name { get; set; }     // git user.name
         public string email { get; set; }    // git user.email
         public string github { get; set; }   // GitHub username Git Credential Manager signs in as
@@ -57,7 +57,7 @@ namespace GitPicker
 
     static class Program
     {
-        public const string Title = "GitPicker";
+        public const string Title = "Hatpick";
         public static float Scale = 1f;
         public static int S(int px) { return (int)Math.Round(px * Scale); }
 
@@ -71,7 +71,7 @@ namespace GitPicker
         {
             try { SetProcessDPIAware(); } catch { }
             bool first;
-            using (var mutex = new Mutex(true, "GitPicker.SingleInstance", out first))
+            using (var mutex = new Mutex(true, "Hatpick.SingleInstance", out first))
             {
                 if (!first)
                 {
@@ -84,7 +84,7 @@ namespace GitPicker
                 using (var g = Graphics.FromHwnd(IntPtr.Zero)) Scale = g.DpiX / 96f;
                 if (Git.Exe == null)
                 {
-                    MessageBox.Show("Couldn't find git.exe.\n\nInstall Git for Windows (git-scm.com), then open GitPicker again.",
+                    MessageBox.Show("Couldn't find git.exe.\n\nInstall Git for Windows (git-scm.com), then open Hatpick again.",
                         Title, MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
@@ -102,7 +102,9 @@ namespace GitPicker
         public const string CredKey = "credential.https://github.com.username";
         public static readonly string Exe = Find();
         static readonly string Home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        public static readonly string IncludeDir = Path.Combine(Home, ".gitpicker");
+        public static readonly string IncludeDir = Path.Combine(Home, ".hatpick");
+        // Include folders this app has written to, including under its earlier names.
+        public static readonly string[] OurIncludeDirs = { ".hatpick/", ".gitpicky/", ".gitpicker/" };
 
         static string Find()
         {
@@ -232,7 +234,7 @@ namespace GitPicker
             return "\"" + (v ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
         }
 
-        // Rewrites ~/.gitpicker/*.gitconfig and the includeIf entries that point at them.
+        // Rewrites ~/.hatpick/*.gitconfig and the includeIf entries that point at them.
         public static void SyncFolderDefaults(Settings s)
         {
             Directory.CreateDirectory(IncludeDir);
@@ -242,7 +244,7 @@ namespace GitPicker
                 string file = FileFor(a);
                 keep.Add(file);
                 var sb = new StringBuilder();
-                sb.Append("# Written by GitPicker for the '" + a.label + "' account. Edit the account in GitPicker - changes here get overwritten.\n");
+                sb.Append("# Written by Hatpick for the '" + a.label + "' account. Edit the account in Hatpick - changes here get overwritten.\n");
                 sb.Append("[user]\n");
                 sb.Append("\tname = " + IniValue(a.name) + "\n");
                 sb.Append("\temail = " + IniValue(a.email) + "\n");
@@ -263,9 +265,9 @@ namespace GitPicker
                 int nl = entry.IndexOf('\n');
                 if (nl < 0) continue;
                 string key = entry.Substring(0, nl), value = entry.Substring(nl + 1);
-                if (value.IndexOf(".gitpicker/", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                if (!OurIncludeDirs.Any(dir => value.IndexOf(dir, StringComparison.OrdinalIgnoreCase) >= 0)) continue;
                 // key looks like "includeif.gitdir/i:C:/Repos/.path"; --remove-section wants the
-                // section exactly as written in the file, and GitPicker writes "includeIf".
+                // section exactly as written in the file, and Hatpick writes "includeIf".
                 string sub = key.Substring("includeif".Length, key.Length - "includeif".Length - ".path".Length);
                 if (Run("config", "--global", "--remove-section", "includeIf" + sub).Code != 0)
                     Run("config", "--global", "--remove-section", "includeif" + sub);
@@ -278,7 +280,7 @@ namespace GitPicker
                 var a = s.accounts.FirstOrDefault(x => x.label == f.account);
                 if (a == null) continue;
                 string dir = f.path.Replace('\\', '/').TrimEnd('/') + "/";
-                Check(Run("config", "--global", "includeIf.gitdir/i:" + dir + ".path", "~/.gitpicker/" + FileFor(a)),
+                Check(Run("config", "--global", "includeIf.gitdir/i:" + dir + ".path", "~/.hatpick/" + FileFor(a)),
                     "Setting the default for " + f.path);
             }
         }
@@ -314,7 +316,10 @@ namespace GitPicker
     class MainForm : Form
     {
         static readonly string Here = AppDomain.CurrentDomain.BaseDirectory;
-        static readonly string SettingsFile = Path.Combine(Here, "gitpicker.json");
+        static readonly string SettingsFile = Path.Combine(Here, "hatpick.json");
+        // Settings files from the app's earlier names (Gitpicky, GitPicker), newest first.
+        static readonly string[] OldSettingsFiles = { Path.Combine(Here, "gitpicky.json"), Path.Combine(Here, "gitpicker.json") };
+        static string OldSettingsFile { get { return OldSettingsFiles.FirstOrDefault(File.Exists); } }
         static readonly string[] SkipDirs = { "node_modules", "Binaries", "Intermediate", "Saved", "DerivedDataCache", "Library", ".godot", ".vs", "obj", "bin" };
         const int MaxDepth = 4;
 
@@ -387,8 +392,9 @@ namespace GitPicker
 
             Shown += delegate
             {
-                if (!File.Exists(SettingsFile)) { SaveSettings(); EditAccounts(); }
-                else Rescan();
+                if (File.Exists(SettingsFile)) Rescan();
+                else if (OldSettingsFile != null) { SaveSettings(); SyncFolders(); Rescan(); }   // carry over from an earlier name
+                else { SaveSettings(); EditAccounts(); }
             };
         }
 
@@ -414,8 +420,9 @@ namespace GitPicker
             Settings s = null;
             try
             {
-                if (File.Exists(SettingsFile))
-                    s = new JavaScriptSerializer().Deserialize<Settings>(File.ReadAllText(SettingsFile));
+                string file = File.Exists(SettingsFile) ? SettingsFile : OldSettingsFile;
+                if (file != null && File.Exists(file))
+                    s = new JavaScriptSerializer().Deserialize<Settings>(File.ReadAllText(file));
             }
             catch { }
             if (s == null) s = FirstRunSettings();
@@ -546,7 +553,7 @@ namespace GitPicker
             if (r.Scope == "") { color = Color.Firebrick; setBy = "Not set"; return "(none)"; }
             var a = AccountByEmail(r.Email);
             if (r.Scope == "local") setBy = "This repo";
-            else if (r.Origin.IndexOf(".gitpicker", StringComparison.OrdinalIgnoreCase) >= 0) { setBy = "Folder default"; color = Color.FromArgb(30, 90, 150); }
+            else if (r.Origin.IndexOf(".hatpick", StringComparison.OrdinalIgnoreCase) >= 0) { setBy = "Folder default"; color = Color.FromArgb(30, 90, 150); }
             else { setBy = r.Scope == "global" ? "Global" : char.ToUpper(r.Scope[0]) + r.Scope.Substring(1); color = SystemColors.GrayText; }
             return a != null ? a.label : r.Email;
         }
@@ -857,7 +864,7 @@ namespace GitPicker
         {
             int i = SelectedIndex; if (i < 0) return;
             var a = accounts[i];
-            if (MessageBox.Show(this, "Remove '" + a.label + "' from GitPicker?\n\nRepos already set to it keep their settings until you change them. Folder defaults that use it are cleared.",
+            if (MessageBox.Show(this, "Remove '" + a.label + "' from Hatpick?\n\nRepos already set to it keep their settings until you change them. Folder defaults that use it are cleared.",
                 "Remove account", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
             accounts.RemoveAt(i);
             Rebuild(i);
@@ -913,7 +920,7 @@ namespace GitPicker
             if (all.Any(a => a != self && string.Equals(a.label, l, StringComparison.OrdinalIgnoreCase)))
             { MessageBox.Show(this, "There's already an account called '" + l + "'.", Program.Title); return; }
             if (all.Any(a => a != self && string.Equals(a.email, e, StringComparison.OrdinalIgnoreCase)))
-            { MessageBox.Show(this, "Another account already uses " + e + ". GitPicker tells accounts apart by email, so each needs its own.", Program.Title); return; }
+            { MessageBox.Show(this, "Another account already uses " + e + ". Hatpick tells accounts apart by email, so each needs its own.", Program.Title); return; }
             target.label = l; target.name = n; target.email = e; target.github = g;
             DialogResult = DialogResult.OK;
         }
@@ -924,7 +931,7 @@ namespace GitPicker
         readonly Settings settings;
 
         public FoldersForm(Settings settings)
-            : base("Scan folders", "GitPicker lists every repo inside these folders. A folder's default account applies to all its repos, including ones you create later, unless a repo has its own account set.")
+            : base("Scan folders", "Hatpick lists every repo inside these folders. A folder's default account applies to all its repos, including ones you create later, unless a repo has its own account set.")
         {
             this.settings = settings;
             List.Columns.Add("Folder", S(400));

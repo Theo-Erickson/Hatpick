@@ -2,4 +2,8 @@
 *.exe
 
 # Per-machine state (your accounts and folders)
+hatpick.json
+
+# Settings files from earlier names
+gitpicky.json
 gitpicker.json
