@@ -6,6 +6,6 @@ cd /d "%~dp0"
 set CSC=%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe
 "%CSC%" /nologo /target:winexe /optimize+ /out:..\Hatpick.exe /win32icon:..\hatpick.ico ^
   /r:System.Web.Extensions.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Core.dll ^
-  Hatpick.cs
+  *.cs
 if errorlevel 1 (echo Build failed.& exit /b 1)
 echo Built ..\Hatpick.exe
