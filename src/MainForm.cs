@@ -71,13 +71,21 @@ namespace Hatpick
             Controls.Add(split);
 
             // left: search + repo list
-            var left = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Padding(S(10), S(8), 0, S(8)) };
+            var left = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(S(10), S(8), 0, S(8)) };
+            left.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             left.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             left.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            var header = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 0, S(6)) };
+            header.Controls.Add(new Label { Text = "Repos", AutoSize = true, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold), Margin = Padding.Empty });
+            header.Controls.Add(HelpUi.Button("list"));
+            var foldersHelp = new LinkLabel { Text = "Watched folders vs. single repos", AutoSize = true, Margin = new Padding(S(10), S(3), 0, 0) };
+            foldersHelp.LinkClicked += delegate { HelpUi.Show(foldersHelp, "folders"); };
+            header.Controls.Add(foldersHelp);
+            left.Controls.Add(header, 0, 0);
             search = new TextBox { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, S(6)) };
             search.HandleCreated += delegate { try { SendMessage(search.Handle, 0x1501, (IntPtr)1, "Search repos"); } catch { } };   // EM_SETCUEBANNER placeholder text
             search.TextChanged += delegate { RebuildList(); };
-            left.Controls.Add(search, 0, 0);
+            left.Controls.Add(search, 0, 1);
             list = new ListView
             {
                 View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, Dock = DockStyle.Fill,
@@ -91,7 +99,7 @@ namespace Hatpick
             listMenu = new ContextMenuStrip();
             listMenu.Opening += (s, e) => { e.Cancel = !BuildListMenu(); };
             list.ContextMenuStrip = listMenu;
-            left.Controls.Add(list, 0, 1);
+            left.Controls.Add(list, 0, 2);
             split.Panel1.Controls.Add(left);
 
             // right: the selected repo's report
@@ -113,8 +121,10 @@ namespace Hatpick
                 if (p != null) OpenPath(p);
             });
             toolbar.Items.Add(addMenu);
-            toolbar.Items.Add(new ToolStripButton("Accounts...", null, delegate { EditAccounts(); }));
-            toolbar.Items.Add(new ToolStripButton("Watched folders...", null, delegate { EditFolders(); }));
+            accountsButton = new ToolStripButton("Accounts...", null, delegate { EditAccounts(); });
+            foldersButton = new ToolStripButton("Watched folders...", null, delegate { EditFolders(); });
+            toolbar.Items.Add(accountsButton);
+            toolbar.Items.Add(foldersButton);
             toolbar.Items.Add(new ToolStripSeparator());
             toolbar.Items.Add(new ToolStripButton("Rescan", null, delegate { Rescan(); }) { ToolTipText = "Look for repos again and re-read their settings (F5)" });
             resetMenu = new ToolStripDropDownButton("Reset");
@@ -127,6 +137,7 @@ namespace Hatpick
             optionsMenu.DropDownItems.Add(explorerItem);
             optionsMenu.DropDownOpening += delegate { explorerItem.Checked = ExplorerMenu.Installed; };
             toolbar.Items.Add(optionsMenu);
+            BuildHelpMenu();
             Controls.Add(toolbar);
 
             var status = new StatusStrip { SizingGrip = true };
@@ -167,23 +178,14 @@ namespace Hatpick
 
         void OnFirstShown()
         {
-            if (!Settings.Exists)
+            if (!Settings.Exists && Settings.OldExists)
             {
-                bool carried = Settings.OldExists;
                 settings.Save();
-                if (carried) SyncFolders();    // move folder defaults over from an earlier name
-                else FirstRun();
+                SyncFolders();    // move folder defaults over from an earlier name
             }
-            Rescan();
+            if (NeedsSetup) RunSetup();   // first time: walk through accounts and folders
+            else Rescan();
             if (startPath != null) OpenPath(startPath);
-        }
-
-        protected virtual void FirstRun()
-        {
-            string gh = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "GitHub");
-            if (Directory.Exists(gh)) settings.folders.Add(new WatchedFolder { path = gh, account = "" });
-            settings.Save();
-            EditAccounts();
         }
 
         protected override void WndProc(ref Message m)
@@ -421,7 +423,7 @@ namespace Hatpick
             if (r.Error == null)
             {
                 var facts = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Margin = new Padding(0, S(10), 0, 0) };
-                facts.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, S(130)));
+                facts.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, S(160)));
                 facts.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
                 AddFact(facts, "remote", "Remote", r.RemoteUrl.Length > 0 ? r.RemoteUrl : "(none yet)", null);
                 var acct = settings.AccountByEmail(r.Email);
@@ -456,7 +458,7 @@ namespace Hatpick
             reportHost.AutoScrollPosition = Point.Empty;
         }
 
-        protected virtual Control HelpButtonFor(string topic) { return null; }
+        Control HelpButtonFor(string topic) { return HelpUi.Button(topic); }
 
         void AddFact(TableLayoutPanel t, string topic, string caption, string value, string setBy)
         {

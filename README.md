@@ -22,15 +22,28 @@ saved sign-in instead of showing its "Select an account" window. Hatpick reads
 the list of signed-in account *names* (`git credential-manager github list`) and
 never runs `git credential fill`, the command that would return a token.
 
-### One-time setup
+## Getting started
 
-Sign each GitHub account into GCM once, from Git Bash or PowerShell:
+The first time Hatpick opens, a short setup walks you through:
 
-```
-git credential-manager github login
-```
+1. **Signing in to Git Credential Manager.** It lists the GitHub accounts GCM
+   already has, and *Sign in an account* runs GCM's own sign-in (a console window
+   plus your browser) for any that are missing. You can also do this from Git
+   Bash, once per account:
+   ```
+   git credential-manager github login
+   ```
+2. **Adding your accounts.** *Add from signed-in accounts* fills in the GitHub
+   usernames; you add the commit email for each.
+3. **Choosing watched folders** and a default account for each.
 
-Run it once per account. A browser window opens for each sign-in.
+At the end it offers a one-minute tour of the window and the Explorer
+right-click entry. Both setup and the tour can be run again from **? Help**.
+
+The **?** buttons next to each part of the report, the repo list and the
+"Set this repo" box explain what that line means. **? Help** also has short
+explainers on how Hatpick works, watched folders vs. single repos, the status
+dots and resetting.
 
 ## The window
 
@@ -122,6 +135,7 @@ Each milestone is tagged:
 | `v1.0-gitpicker` | First version, named GitPicker |
 | `v1.1-hatpick` | Renamed to Hatpick (Gitpicky went to a separate project) |
 | `v1.2-hat-trick-icon` | Hat-trick icon |
+| `v2.0-analyzer` | Repo analyzer, reset, first-run setup, tour and help |
 
 To get any version as its own folder:
 
