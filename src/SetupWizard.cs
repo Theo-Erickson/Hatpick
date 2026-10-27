@@ -142,7 +142,7 @@ namespace Hatpick
             {
                 var acct = a;
                 var row = new DockPanel();
-                var tile = Hats.Tile(a.hat, 44);
+                var tile = Hats.TileFor(a, 44);
                 tile.Margin = new Thickness(0, 0, 12, 0);
                 DockPanel.SetDock(tile, Dock.Left);
                 row.Children.Add(tile);
@@ -189,7 +189,7 @@ namespace Hatpick
             {
                 var folder = f;
                 var choices = new List<Ui.Choice> { new Ui.Choice { Value = "", Label = "No default hat" } };
-                foreach (var a in settings.accounts) choices.Add(new Ui.Choice { Value = a.label, Label = a.label, Sub = a.email, Hat = a.hat });
+                foreach (var a in settings.accounts) choices.Add(new Ui.Choice { Value = a.label, Label = a.label, Sub = a.email, Acct = a });
                 var row = new DockPanel();
                 var right = Ui.Row(6, Ui.Picker(choices, f.account ?? "", v => folder.account = v, 200),
                     Ui.Btn("Remove", delegate { settings.folders.Remove(folder); Go(page); }, "BtnGhost"));

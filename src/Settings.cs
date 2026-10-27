@@ -14,6 +14,8 @@ namespace Hatpick
         public string email { get; set; }    // git user.email
         public string github { get; set; }   // GitHub username Git Credential Manager signs in as
         public string hat { get; set; }      // picture: hardhat, beanie, tophat, cap, bowler
+        public Dictionary<string, string> colors { get; set; }   // custom colors per hat part ("main", "trim", "extra")
+        public string image { get; set; }    // custom picture file in the "hats" folder, instead of a drawn hat
     }
 
     // The hat pictures an account can wear (drawn in Ui.cs).
@@ -40,7 +42,7 @@ namespace Hatpick
         public bool setupDone { get; set; }
         public string theme { get; set; }                  // "dark" or "light"
 
-        static readonly string Here = AppDomain.CurrentDomain.BaseDirectory;
+        static readonly string Here = Demo.On ? Demo.Root : AppDomain.CurrentDomain.BaseDirectory;
         public static readonly string FilePath = Path.Combine(Here, "hatpick.json");
         // Settings files from the app's earlier names (Gitpicky, GitPicker), newest first.
         static readonly string[] OldFiles = { Path.Combine(Here, "gitpicky.json"), Path.Combine(Here, "gitpicker.json") };

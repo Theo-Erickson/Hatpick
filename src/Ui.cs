@@ -251,7 +251,7 @@ namespace Hatpick
         }
 
         // A dropdown made of our own pieces, so it follows the theme everywhere.
-        public class Choice { public string Value, Label, Sub, Hat; }
+        public class Choice { public string Value, Label, Sub, Hat; public Account Acct; }
 
         public static Button Picker(List<Choice> choices, string selected, Action<string> onPick, double width = 260)
         {
@@ -265,8 +265,9 @@ namespace Hatpick
                 DockPanel.SetDock(chev, Dock.Right);
                 g.Children.Add(chev);
                 var row = new StackPanel { Orientation = Orientation.Horizontal };
-                row.Children.Add(c.Hat != null ? Hats.Icon(c.Hat, 20) : (UIElement)new Border { Width = 0 });
-                var t = new TextBlock { Text = c.Label, Margin = new Thickness(c.Hat != null ? 8 : 0, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+                bool hasHat = c.Acct != null || c.Hat != null;
+                row.Children.Add(c.Acct != null ? Hats.For(c.Acct, 20) : c.Hat != null ? Hats.Icon(c.Hat, 20) : (UIElement)new Border { Width = 0 });
+                var t = new TextBlock { Text = c.Label, Margin = new Thickness(hasHat ? 8 : 0, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
                 row.Children.Add(t);
                 g.Children.Add(row);
                 btn.Content = g;
@@ -281,7 +282,7 @@ namespace Hatpick
                 {
                     var choice = ch;
                     var r = new StackPanel { Orientation = Orientation.Horizontal };
-                    if (choice.Hat != null) { var hi = Hats.Icon(choice.Hat, 22); hi.Margin = new Thickness(0, 0, 10, 0); r.Children.Add(hi); }
+                    if (choice.Acct != null || choice.Hat != null) { var hi = choice.Acct != null ? Hats.For(choice.Acct, 22) : Hats.Icon(choice.Hat, 22); hi.Margin = new Thickness(0, 0, 10, 0); r.Children.Add(hi); }
                     var texts = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
                     texts.Children.Add(Text(choice.Label, 13, "Text", (string)btn.Tag == choice.Value ? FontWeights.SemiBold : FontWeights.Normal));
                     if (!string.IsNullOrEmpty(choice.Sub)) texts.Children.Add(Text(choice.Sub, 11.5, "Muted"));
@@ -301,12 +302,28 @@ namespace Hatpick
         }
     }
 
-    // The hat pictures, drawn from simple shapes so they stay crisp at any size.
+    // The hat pictures, drawn from simple shapes so they stay crisp at any size. Each hat
+    // has a few colored parts that can be changed per account, or the account can use a
+    // picture instead (stored in the "hats" folder next to the .exe).
     static class Hats
     {
         public static string[] Kinds { get { return HatKinds.All; } }
         public static readonly Dictionary<string, string> Names = new Dictionary<string, string>
         { { "hardhat", "Hard hat" }, { "beanie", "Beanie" }, { "tophat", "Top hat" }, { "cap", "Baseball cap" }, { "bowler", "Bowler" } };
+
+        public class Part { public string Key, Name, Default; public Part(string k, string n, string d) { Key = k; Name = n; Default = d; } }
+
+        // The colorable parts of each hat, with their default colors.
+        public static readonly Dictionary<string, Part[]> Parts = new Dictionary<string, Part[]>
+        {
+            { "hardhat", new[] { new Part("main", "Shell", "#f5c02a"), new Part("trim", "Brim", "#d9a514"), new Part("extra", "Ridge", "#ffd95a") } },
+            { "beanie", new[] { new Part("main", "Knit", "#d64545"), new Part("trim", "Cuff", "#a83232"), new Part("extra", "Pom-pom", "#f4efe6") } },
+            { "tophat", new[] { new Part("main", "Body", "#2e2e3a"), new Part("trim", "Band", "#ec7a30"), new Part("extra", "Top", "#4a4a5a") } },
+            { "cap", new[] { new Part("main", "Crown", "#3468c4"), new Part("trim", "Bill", "#24508f") } },
+            { "bowler", new[] { new Part("main", "Body", "#6b4a2e"), new Part("trim", "Band", "#2e2118") } },
+        };
+
+        public static readonly string ImageDir = System.IO.Path.Combine(Demo.On ? Demo.Root : AppDomain.CurrentDomain.BaseDirectory, "hats");
 
         public static string TintKey(string kind)
         {
@@ -320,7 +337,14 @@ namespace Hatpick
             }
         }
 
-        static SolidColorBrush B(string hex) { var b = (SolidColorBrush)new BrushConverter().ConvertFromString(hex); b.Freeze(); return b; }
+        static SolidColorBrush B(string hex)
+        {
+            SolidColorBrush b;
+            try { b = (SolidColorBrush)new BrushConverter().ConvertFromString(hex); }
+            catch { b = new SolidColorBrush(Colors.Gray); }
+            b.Freeze();
+            return b;
+        }
 
         static void P(Canvas c, string data, string fill)
         {
@@ -341,37 +365,47 @@ namespace Hatpick
             c.Children.Add(e);
         }
 
-        // kind "none" = a dashed empty circle (no hat).
-        public static FrameworkElement Icon(string kind, double size)
+        public static string Color(string kind, Dictionary<string, string> colors, string part)
         {
+            string v;
+            if (colors != null && colors.TryGetValue(part, out v) && !string.IsNullOrEmpty(v)) return v;
+            Part[] parts;
+            if (Parts.TryGetValue(kind, out parts)) foreach (var p in parts) if (p.Key == part) return p.Default;
+            return "#808080";
+        }
+
+        // kind "none" = a dashed empty circle (no hat).
+        public static FrameworkElement Icon(string kind, double size, Dictionary<string, string> colors = null)
+        {
+            Func<string, string> col = part => Color(kind, colors, part);
             var c = new Canvas { Width = 24, Height = 24 };
             switch (kind)
             {
                 case "hardhat":
-                    P(c, "M4 16a8 8 0 0 1 16 0z", "#f5c02a");
-                    R(c, 10.4, 7.2, 3.2, 8.8, 1.6, "#ffd95a");
-                    R(c, 2, 15.5, 20, 3.2, 1.6, "#d9a514");
+                    P(c, "M4 16a8 8 0 0 1 16 0z", col("main"));
+                    R(c, 10.4, 7.2, 3.2, 8.8, 1.6, col("extra"));
+                    R(c, 2, 15.5, 20, 3.2, 1.6, col("trim"));
                     break;
                 case "beanie":
-                    P(c, "M5 15a7 7 0 0 1 14 0z", "#d64545");
-                    R(c, 4, 13.5, 16, 5, 2, "#a83232");
-                    E(c, 12, 6.4, 2.3, 2.3, "#f4efe6");
+                    P(c, "M5 15a7 7 0 0 1 14 0z", col("main"));
+                    R(c, 4, 13.5, 16, 5, 2, col("trim"));
+                    E(c, 12, 6.4, 2.3, 2.3, col("extra"));
                     break;
                 case "tophat":
-                    R(c, 7, 4, 10, 12.5, 1, "#2e2e3a");
-                    E(c, 12, 4.2, 5, 1.2, "#4a4a5a");
-                    R(c, 7, 12.6, 10, 2.6, 0, "#ec7a30");
-                    E(c, 12, 17, 9.5, 2, "#2e2e3a");
+                    R(c, 7, 4, 10, 12.5, 1, col("main"));
+                    E(c, 12, 4.2, 5, 1.2, col("extra"));
+                    R(c, 7, 12.6, 10, 2.6, 0, col("trim"));
+                    E(c, 12, 17, 9.5, 2, col("main"));
                     break;
                 case "cap":
-                    P(c, "M5 16a7 7 0 0 1 14 0z", "#3468c4");
-                    P(c, "M14 15.2h7.5a1.6 1.6 0 0 1-1.6 1.8H14z", "#24508f");
-                    E(c, 12, 8.6, 1.1, 1.1, "#24508f");
+                    P(c, "M5 16a7 7 0 0 1 14 0z", col("main"));
+                    P(c, "M14 15.2h7.5a1.6 1.6 0 0 1-1.6 1.8H14z", col("trim"));
+                    E(c, 12, 8.6, 1.1, 1.1, col("trim"));
                     break;
                 case "bowler":
-                    P(c, "M6.5 15a5.5 5.5 0 0 1 11 0z", "#6b4a2e");
-                    R(c, 6.5, 12.6, 11, 2, 0, "#2e2118");
-                    E(c, 12, 15.6, 9, 1.7, "#6b4a2e");
+                    P(c, "M6.5 15a5.5 5.5 0 0 1 11 0z", col("main"));
+                    R(c, 6.5, 12.6, 11, 2, 0, col("trim"));
+                    E(c, 12, 15.6, 9, 1.7, col("main"));
                     break;
                 default:
                     var ring = new Ellipse { Width = 18, Height = 18, StrokeThickness = 1.8, StrokeDashArray = new DoubleCollection { 2, 2 } };
@@ -383,11 +417,57 @@ namespace Hatpick
             return new Viewbox { Width = size, Height = size, Child = c, VerticalAlignment = VerticalAlignment.Center };
         }
 
+        // The picture file for an account's custom hat, or null.
+        public static string ImagePath(Account a)
+        {
+            if (a == null || string.IsNullOrEmpty(a.image)) return null;
+            string p = System.IO.Path.Combine(ImageDir, a.image);
+            return System.IO.File.Exists(p) ? p : null;
+        }
+
+        static FrameworkElement Picture(string path, double size)
+        {
+            try
+            {
+                var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                bmp.BeginInit();
+                bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;   // don't keep the file locked
+                bmp.UriSource = new Uri(path);
+                bmp.DecodePixelWidth = (int)Math.Max(32, size * 2);
+                bmp.EndInit();
+                bmp.Freeze();
+                return new Image { Source = bmp, Width = size, Height = size, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center };
+            }
+            catch { return Icon("none", size); }
+        }
+
+        // An account's hat: its picture if it has one, else its hat in its colors.
+        public static FrameworkElement For(Account a, double size)
+        {
+            if (a == null) return Icon("none", size);
+            string img = ImagePath(a);
+            return img != null ? Picture(img, size) : Icon(a.hat, size, a.colors);
+        }
+
         // Hat on a soft tinted tile, used on cards.
         public static Border Tile(string kind, double size)
         {
             var b = new Border { Width = size, Height = size, CornerRadius = new CornerRadius(size * 0.24), Child = Icon(kind, size * 0.72) };
             b.SetResourceReference(Border.BackgroundProperty, kind == "none" ? "Input" : TintKey(kind));
+            return b;
+        }
+
+        public static Border TileFor(Account a, double size)
+        {
+            if (a == null) return Tile("none", size);
+            var b = new Border { Width = size, Height = size, CornerRadius = new CornerRadius(size * 0.24), Child = For(a, size * 0.72) };
+            string main = a.colors != null && a.colors.ContainsKey("main") ? a.colors["main"] : null;
+            if (main != null && ImagePath(a) == null)
+            {
+                var tint = B(main).Color;
+                b.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(58, tint.R, tint.G, tint.B));
+            }
+            else b.SetResourceReference(Border.BackgroundProperty, ImagePath(a) != null ? "Input" : TintKey(a.hat));
             return b;
         }
     }

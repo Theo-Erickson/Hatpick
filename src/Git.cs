@@ -24,7 +24,7 @@ namespace Hatpick
     {
         public const string CredKey = "credential.https://github.com.username";
         public static readonly string Exe = Find();
-        static readonly string Home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        static readonly string Home = Demo.On ? Demo.HomeDir : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         public static readonly string IncludeDir = Path.Combine(Home, ".hatpick");
         // Include folders this app has written to, including under its earlier names.
         public static readonly string[] OurIncludeDirs = { ".hatpick/", ".gitpicky/", ".gitpicker/" };
@@ -169,6 +169,7 @@ namespace Hatpick
         public static List<string> CredentialManagerAccounts()
         {
             var list = new List<string>();
+            if (Demo.On) { GcmAvailable = true; return new List<string>(Demo.GcmAccounts); }
             try
             {
                 var r = Run("credential-manager", "github", "list");
@@ -185,6 +186,7 @@ namespace Hatpick
         // Hatpick never sees what you type there.
         public static Process StartGcmLogin()
         {
+            if (Demo.On) throw new Exception("This is the demo, so there's nothing to sign in to.");
             var psi = new ProcessStartInfo(Exe, "credential-manager github login")
             {
                 UseShellExecute = false, CreateNoWindow = false, WorkingDirectory = Home

@@ -133,7 +133,7 @@ namespace Hatpick
             facts.Margin = new Thickness(0, 6, 0, 10);
             var ch = CommitHat(r);
             facts.Children.Add(FactCard("Commits as", "commits", r.Email.Length == 0 ? "none" : ch != null ? ch.hat : "unknown",
-                r.Email.Length == 0 ? "No hat" : ch != null ? ch.label : r.Name, r.Email.Length == 0 ? "Commits will fail" : r.Email));
+                r.Email.Length == 0 ? "No hat" : ch != null ? ch.label : r.Name, r.Email.Length == 0 ? "Commits will fail" : r.Email, ch));
             var ph = PushHat(r);
             string pushTitle, pushSub, pushKind;
             if (r.IsSsh) { pushKind = "key"; pushTitle = "SSH key"; pushSub = "Your SSH key decides"; }
@@ -144,7 +144,7 @@ namespace Hatpick
                 pushKind = ph != null ? ph.hat : "unknown"; pushTitle = ph != null ? ph.label : r.PushUser;
                 pushSub = r.PushUser + (r.SignedIn == true ? "  ·  signed in" : r.SignedIn == false ? "  ·  not signed in" : "");
             }
-            facts.Children.Add(FactCard("Pushes as", "pushes", pushKind, pushTitle, pushSub));
+            facts.Children.Add(FactCard("Pushes as", "pushes", pushKind, pushTitle, pushSub, r.IsSsh || r.IsLocal ? null : ph));
             facts.Children.Add(FactCard("Remote", "remote", "cloud", r.RemoteName.Length > 0 ? r.RemoteName : "No remote",
                 r.Host.Length > 0 ? r.Host + "/" + r.Owner + "/" + r.RepoName : r.RemoteUrl.Length > 0 ? r.RemoteUrl : "Add one by publishing from GitHub Desktop"));
             sp.Children.Add(facts);
@@ -181,7 +181,7 @@ namespace Hatpick
             return b;
         }
 
-        Button FactCard(string caption, string help, string kind, string title, string sub)
+        Button FactCard(string caption, string help, string kind, string title, string sub, Account acct = null)
         {
             var sp = new StackPanel();
             sp.Children.Add(Ui.TitleWithHelp(Ui.Text(caption, 12, "Muted"), help));
@@ -198,7 +198,7 @@ namespace Hatpick
                 t.SetResourceReference(Border.BackgroundProperty, "Input");
                 tile = t;
             }
-            else tile = Hats.Tile(kind, 40);
+            else tile = acct != null ? Hats.TileFor(acct, 40) : Hats.Tile(kind, 40);
             var name = Ui.Text(title, 17, "Text", FontWeights.SemiBold);
             name.VerticalAlignment = VerticalAlignment.Center;
             var row = Ui.Row(10, tile, name);
@@ -376,7 +376,7 @@ namespace Hatpick
 
             // rewrite controls
             var authorChoices = new List<Ui.Choice> { new Ui.Choice { Value = "", Label = "Keep the author" } };
-            foreach (var a in settings.accounts) authorChoices.Add(new Ui.Choice { Value = a.label, Label = a.label, Sub = a.name + " <" + a.email + ">", Hat = a.hat });
+            foreach (var a in settings.accounts) authorChoices.Add(new Ui.Choice { Value = a.label, Label = a.label, Sub = a.name + " <" + a.email + ">", Acct = a });
             var author = Ui.Picker(authorChoices, rewriteAuthor, v => rewriteAuthor = v, 240);
             var strip = new CheckBox { Content = "Remove co-authors", IsChecked = rewriteStrip, VerticalAlignment = VerticalAlignment.Center };
             strip.Click += delegate { rewriteStrip = strip.IsChecked == true; };
@@ -414,7 +414,7 @@ namespace Hatpick
             row.Children.Add(cb);
 
             var acct = settings.AccountByEmail(c.AuthorEmail);
-            var hatIcon = acct != null ? Hats.Icon(acct.hat, 22) : Ui.Icon("user", 20, "Muted");
+            var hatIcon = acct != null ? Hats.For(acct, 22) : Ui.Icon("user", 20, "Muted");
             hatIcon.Margin = new Thickness(0, 0, 10, 0);
             hatIcon.ToolTip = c.AuthorName + " <" + c.AuthorEmail + ">";
             DockPanel.SetDock(hatIcon, Dock.Left);

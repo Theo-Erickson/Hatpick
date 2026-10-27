@@ -15,8 +15,8 @@ using System.Windows;
 [assembly: System.Reflection.AssemblyTitle("Hatpick")]
 [assembly: System.Reflection.AssemblyProduct("Hatpick")]
 [assembly: System.Reflection.AssemblyDescription("Pick which Git account each repo commits and pushes as")]
-[assembly: System.Reflection.AssemblyVersion("3.0.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("3.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("3.1.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("3.1.0.0")]
 
 namespace Hatpick
 {
@@ -39,9 +39,10 @@ namespace Hatpick
         [STAThread]
         static void Main(string[] args)
         {
+            args = Demo.TakeArgs(args);   // --demo: made-up accounts and repos, nothing real touched
             string openPath = args.Length > 0 ? args[0].Trim().Trim('"') : null;
             bool first;
-            using (var mutex = new Mutex(true, "Hatpick.SingleInstance", out first))
+            using (var mutex = new Mutex(true, Demo.On ? "Hatpick.Demo" : "Hatpick.SingleInstance", out first))
             {
                 if (!first)
                 {
@@ -68,7 +69,7 @@ namespace Hatpick
                             Title, MessageBoxButton.OK, MessageBoxImage.Error);
                         return;
                     }
-                    var settings = Settings.Load();
+                    var settings = Demo.On ? Demo.Build() : Settings.Load();
                     Theme.Current = settings.theme;
                     Theme.Init(app);
                     var w = new MainWindow(settings, openPath);
@@ -84,7 +85,7 @@ namespace Hatpick
         // Anything unexpected: write it next to the .exe and say where, so it can be fixed.
         public static void Report(Exception e)
         {
-            string text = DateTime.Now + "\n" + e + "\n\n";
+            string text = DateTime.Now + (Demo.On ? " (demo)" : "") + "\n" + e + "\n\n";
             try { File.AppendAllText(LogPath, text); } catch { }
             MessageBox.Show("Something went wrong:\n\n" + e.Message + "\n\nDetails were saved to:\n" + LogPath,
                 Title, MessageBoxButton.OK, MessageBoxImage.Error);

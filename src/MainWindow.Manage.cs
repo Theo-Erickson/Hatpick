@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Shapes;
 
 namespace Hatpick
 {
@@ -12,17 +14,29 @@ namespace Hatpick
     {
         // ---------- Hats ----------
 
+        string selectedHat;   // label of the hat picked on the rack
+
         FrameworkElement HatsPage()
         {
             var sp = new StackPanel();
             sp.Children.Add(Header("Hats", "hats",
                 Ui.IconBtn(Ui.Icon("plus", 14, "Text"), "Add a hat", delegate { AddAccount(); }, "BtnPrimary")));
 
-            if (settings.accounts.Count == 0)
-                sp.Children.Add(Ui.Panel(Ui.Stack(8, Ui.Text("No hats yet", 16, "Text", FontWeights.SemiBold),
-                    Ui.Text("Add one for each GitHub account you use - for example Work and Personal.", 13.5, "Sub")), 20));
+            var rack = HatRack();
+            sp.Children.Add(rack);
+            Marks["rack"] = rack;
 
-            foreach (var a in settings.accounts) sp.Children.Add(AccountRow(a));
+            var sel = settings.AccountByLabel(selectedHat) ?? settings.accounts.FirstOrDefault();
+            if (sel != null)
+            {
+                selectedHat = sel.label;
+                var row = AccountRow(sel);
+                row.Margin = new Thickness(0, 14, 0, 0);
+                sp.Children.Add(row);
+            }
+            else
+                sp.Children.Add(Ui.Panel(Ui.Stack(8, Ui.Text("No hats yet", 16, "Text", FontWeights.SemiBold),
+                    Ui.Text("Add one for each GitHub account you use - for example Work and Personal. Each gets a hat on the rack.", 13.5, "Sub")), 20));
 
             // Git Credential Manager
             var gcmBox = new StackPanel();
@@ -43,7 +57,7 @@ namespace Hatpick
                         DockPanel.SetDock(make, Dock.Right);
                         row.Children.Add(make);
                     }
-                    var who = Ui.Row(10, hat != null ? Hats.Icon(hat.hat, 22) : Ui.Icon("user", 20, "Muted"),
+                    var who = Ui.Row(10, hat != null ? Hats.For(hat, 22) : Ui.Icon("user", 20, "Muted"),
                         Ui.MonoText(user, 13, "Text"), Ui.Text(hat != null ? "worn as " + hat.label : "not a hat yet", 12, "Muted"));
                     row.Children.Add(who);
                     gcmBox.Children.Add(row);
@@ -60,17 +74,100 @@ namespace Hatpick
             return PageScroll(sp);
         }
 
+        // A wall-mounted hat rack: one peg per hat, plus an empty peg for adding one.
+        // It grows with your hats and scrolls sideways when it runs out of room.
+        Border HatRack()
+        {
+            const double Slot = 132;
+            var g = new Grid { HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(10, 6, 10, 4) };
+            g.RowDefinitions.Add(new RowDefinition { Height = new GridLength(100) });   // hats
+            g.RowDefinitions.Add(new RowDefinition { Height = new GridLength(12) });    // pegs
+            g.RowDefinitions.Add(new RowDefinition { Height = new GridLength(18) });    // the bar
+            g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });       // labels
+            int n = settings.accounts.Count + 1;
+            for (int i = 0; i < n; i++) g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Slot) });
+
+            var wood = new LinearGradientBrush(Color.FromRgb(0xa8, 0x76, 0x44), Color.FromRgb(0x6b, 0x44, 0x23), 90);
+            var bar = new Border { CornerRadius = new CornerRadius(9), Background = wood, Margin = new Thickness(-8, 0, -8, 0) };
+            bar.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 8, ShadowDepth = 3, Opacity = 0.35 };
+            Grid.SetRow(bar, 2); Grid.SetColumnSpan(bar, n);
+            g.Children.Add(bar);
+            foreach (var end in new[] { HorizontalAlignment.Left, HorizontalAlignment.Right })   // mounting screws
+            {
+                var screw = new Ellipse { Width = 7, Height = 7, Fill = new SolidColorBrush(Color.FromRgb(0xd8, 0xc0, 0x9a)), HorizontalAlignment = end, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, 0) };
+                Grid.SetRow(screw, 2); Grid.SetColumnSpan(screw, n);
+                g.Children.Add(screw);
+            }
+
+            for (int i = 0; i < n; i++)
+            {
+                bool isAdd = i == settings.accounts.Count;
+                var a = isAdd ? null : settings.accounts[i];
+                bool on = a != null && a.label == selectedHat || a != null && selectedHat == null && i == 0;
+
+                var peg = new Border { Width = 12, CornerRadius = new CornerRadius(3, 3, 0, 0), Background = wood, HorizontalAlignment = HorizontalAlignment.Center };
+                Grid.SetRow(peg, 1); Grid.SetColumn(peg, i);
+                g.Children.Add(peg);
+
+                var hatBtn = new Button { Style = Ui.Style("Row"), Padding = new Thickness(6), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, MinHeight = 0 };
+                if (isAdd)
+                {
+                    var plus = new Grid { Width = 72, Height = 72 };
+                    var ring = new Ellipse { StrokeThickness = 2, StrokeDashArray = new DoubleCollection { 3, 3 } };
+                    ring.SetResourceReference(Shape.StrokeProperty, "Dashed");
+                    plus.Children.Add(ring);
+                    var ic = Ui.Icon("plus", 26, "Muted");
+                    ic.HorizontalAlignment = HorizontalAlignment.Center;
+                    plus.Children.Add(ic);
+                    hatBtn.Content = plus;
+                    hatBtn.ToolTip = "Add a hat";
+                    hatBtn.Click += delegate { AddAccount(); };
+                }
+                else
+                {
+                    var acct = a;
+                    var hat = Hats.For(a, 80);
+                    hatBtn.Content = hat;
+                    hatBtn.ToolTip = a.label + "  -  " + a.email + "\nClick to see it, double-click to edit";
+                    if (on)
+                    {
+                        hatBtn.RenderTransform = new TranslateTransform(0, -6);   // the picked hat lifts off its peg a little
+                        hat.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 16, ShadowDepth = 6, Opacity = 0.45 };
+                    }
+                    hatBtn.Click += delegate { selectedHat = acct.label; Render(); };
+                    hatBtn.MouseDoubleClick += delegate { EditAccount(acct); };
+                }
+                System.Windows.Automation.AutomationProperties.SetName(hatBtn, isAdd ? "Add a hat" : a.label + " hat");
+                Grid.SetRow(hatBtn, 0); Grid.SetColumn(hatBtn, i);
+                g.Children.Add(hatBtn);
+
+                int count = a == null ? 0 : reports.Count(r => string.Equals(r.Email, a.email, StringComparison.OrdinalIgnoreCase));
+                var label = Ui.Stack(1, Ui.Text(isAdd ? "Add a hat" : a.label, 13.5, on ? "Accent" : isAdd ? "Muted" : "Text", on ? FontWeights.Bold : FontWeights.SemiBold),
+                    Ui.Text(isAdd ? " " : count + (count == 1 ? " repo" : " repos"), 11.5, "Muted"));
+                foreach (TextBlock t in label.Children) { t.HorizontalAlignment = HorizontalAlignment.Center; t.TextWrapping = TextWrapping.NoWrap; t.TextTrimming = TextTrimming.CharacterEllipsis; }
+                label.Margin = new Thickness(4, 8, 4, 0);
+                Grid.SetRow(label, 3); Grid.SetColumn(label, i);
+                g.Children.Add(label);
+            }
+
+            var scroll = new ScrollViewer { Content = g, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled, Padding = new Thickness(0, 0, 0, 4) };
+            var title = Ui.TitleWithHelp(Ui.Text("Your hat rack", 15, "Text", FontWeights.SemiBold), "hats");
+            var hint = Ui.Text("Click a hat to see it below, double-click to edit it.", 12, "Muted");
+            hint.Margin = new Thickness(0, 2, 0, 8);
+            return Ui.Panel(Ui.Stack(0, title, hint, scroll), 18);
+        }
+
         Border AccountRow(Account a)
         {
             int commits = reports.Count(r => string.Equals(r.Email, a.email, StringComparison.OrdinalIgnoreCase));
             int folders = settings.folders.Count(f => f.account == a.label);
             var row = new DockPanel();
-            var tile = Hats.Tile(a.hat, 60);
+            var tile = Hats.TileFor(a, 60);
             tile.Margin = new Thickness(0, 0, 16, 0);
             DockPanel.SetDock(tile, Dock.Left);
             row.Children.Add(tile);
 
-            var btns = Ui.Row(6, Ui.Btn("Edit", delegate { EditAccount(a); }), Ui.Btn("Remove", delegate { RemoveAccount(a); }, "BtnGhost"));
+            var btns = Ui.Row(6, Ui.Btn("Edit hat", delegate { EditAccount(a); }, "BtnPrimary"), Ui.Btn("Remove", delegate { RemoveAccount(a); }, "BtnGhost"));
             btns.VerticalAlignment = VerticalAlignment.Center;
             DockPanel.SetDock(btns, Dock.Right);
             row.Children.Add(btns);
@@ -83,7 +180,7 @@ namespace Hatpick
                         "  ·  " + commits + " repo(s)" + (folders > 0 ? "  ·  default for " + folders + " folder(s)" : ""), 12, "Muted"));
             info.VerticalAlignment = VerticalAlignment.Center;
             row.Children.Add(info);
-            var b = Ui.Panel(row, 16);
+            var b = Ui.Panel(row, 16, "Panel", "Accent");
             b.Margin = new Thickness(0, 0, 0, 10);
             return b;
         }
@@ -121,7 +218,7 @@ namespace Hatpick
                 var remove = Ui.Btn("Remove", delegate { if (r != null) RemoveSingle(r); else { settings.repos.RemoveAll(x => Settings.SamePath(x, p)); settings.Save(); Rescan(); } }, "BtnGhost");
                 DockPanel.SetDock(remove, Dock.Right);
                 row.Children.Add(remove);
-                row.Children.Add(Ui.Row(10, Ui.Icon("repos", 18, "Muted"), Ui.Stack(1, Ui.Text(Path.GetFileName(p.TrimEnd('\\')), 14, "Text", FontWeights.SemiBold), Ui.MonoText(p, 11.5, "Muted"))));
+                row.Children.Add(Ui.Row(10, Ui.Icon("repos", 18, "Muted"), Ui.Stack(1, Ui.Text(System.IO.Path.GetFileName(p.TrimEnd('\\')), 14, "Text", FontWeights.SemiBold), Ui.MonoText(p, 11.5, "Muted"))));
                 var b = Ui.Panel(row, 12);
                 b.Margin = new Thickness(0, 0, 0, 8);
                 singles.Children.Add(b);
@@ -189,7 +286,7 @@ namespace Hatpick
             foreach (var p in managed)
             {
                 var cb = new CheckBox { IsChecked = true, Tag = p, Margin = new Thickness(0, 0, 0, 10),
-                    Content = Ui.Stack(1, Ui.Text(Path.GetFileName(p), 14, "Text", FontWeights.SemiBold), Ui.MonoText(p, 11.5, "Muted")) };
+                    Content = Ui.Stack(1, Ui.Text(System.IO.Path.GetFileName(p), 14, "Text", FontWeights.SemiBold), Ui.MonoText(p, 11.5, "Muted")) };
                 boxes.Add(cb);
                 list.Children.Add(cb);
             }
@@ -210,7 +307,7 @@ namespace Hatpick
                 foreach (var p in chosen)
                 {
                     try { Git.Reset(p); settings.UnmarkManaged(p); }
-                    catch (Exception e) { errors.Add(Path.GetFileName(p) + ": " + e.Message); }
+                    catch (Exception e) { errors.Add(System.IO.Path.GetFileName(p) + ": " + e.Message); }
                 }
                 settings.managed.RemoveAll(m => !Directory.Exists(m));
                 if (folders)

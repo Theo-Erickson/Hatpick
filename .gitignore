@@ -7,3 +7,12 @@ hatpick.json
 # Settings files from earlier names
 gitpicky.json
 gitpicker.json
+
+# Crash log (has local paths in it)
+hatpick-error.log
+
+# Custom hat pictures
+hats/
+
+# README media work files (tools/readme_capture)
+.work/

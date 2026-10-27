@@ -91,7 +91,7 @@ namespace Hatpick
         {
             int count = reports.Count(r => string.Equals(r.Email, a.email, StringComparison.OrdinalIgnoreCase));
             var g = new DockPanel();
-            var tile = Hats.Tile(a.hat, 52);
+            var tile = Hats.TileFor(a, 52);
             tile.Margin = new Thickness(0, 0, 14, 0);
             DockPanel.SetDock(tile, Dock.Left);
             g.Children.Add(tile);
@@ -163,7 +163,7 @@ namespace Hatpick
             foreach (var a in settings.accounts)
             {
                 var acct = a;
-                var row = Ui.Row(10, Hats.Icon(a.hat, 22), Ui.Stack(0, Ui.Text(a.label, 13, "Text", FontWeights.SemiBold), Ui.Text(a.email, 11.5, "Muted")));
+                var row = Ui.Row(10, Hats.For(a, 22), Ui.Stack(0, Ui.Text(a.label, 13, "Text", FontWeights.SemiBold), Ui.Text(a.email, 11.5, "Muted")));
                 var b = new Button { Style = Ui.Style("Row"), Content = row, MinHeight = 40 };
                 b.Click += delegate { popup.IsOpen = false; Apply(r, acct, acct.github); };
                 list.Children.Add(b);
@@ -221,14 +221,10 @@ namespace Hatpick
             sp.Children.Add(top);
 
             var hats = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
-            hats.Children.Add(HatOrUnknown(CommitHatKind(r), 22));
+            hats.Children.Add(CommitHatIcon(r, 22));
             hats.Children.Add(Pad(Ui.Text("commits", 12, "Muted"), 6, 14));
             if (r.IsSsh) hats.Children.Add(Ui.Icon("key", 20, "Muted"));
-            else
-            {
-                var ph = PushHat(r);
-                hats.Children.Add(HatOrUnknown(r.PushUser.Length == 0 ? "none" : ph != null ? ph.hat : "unknown", 22));
-            }
+            else hats.Children.Add(PushHatIcon(r, 22));
             hats.Children.Add(Pad(Ui.Text(r.IsSsh ? "pushes with SSH key" : "pushes", 12, "Muted"), 6, 0));
             sp.Children.Add(hats);
 
@@ -250,10 +246,19 @@ namespace Hatpick
             return e;
         }
 
-        // An account Hatpick doesn't know shows as a plain person icon.
-        static FrameworkElement HatOrUnknown(string kind, double size)
+        // The hat a repo commits / pushes with. An account Hatpick doesn't know shows as a person.
+        FrameworkElement CommitHatIcon(RepoReport r, double size)
         {
-            return kind == "unknown" ? Ui.Icon("user", size, "Muted") : Hats.Icon(kind, size);
+            if (r.Error != null || r.Email.Length == 0) return Hats.Icon("none", size);
+            var a = CommitHat(r);
+            return a != null ? Hats.For(a, size) : Ui.Icon("user", size, "Muted");
+        }
+
+        FrameworkElement PushHatIcon(RepoReport r, double size)
+        {
+            if (r.PushUser.Length == 0) return Hats.Icon("none", size);
+            var a = PushHat(r);
+            return a != null ? Hats.For(a, size) : Ui.Icon("user", size, "Muted");
         }
 
         string CardNote(RepoReport r)

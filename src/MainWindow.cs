@@ -42,6 +42,7 @@ namespace Hatpick
             this.startPath = startPath;
             Title = Program.Title;
             Width = 1240; Height = 820; MinWidth = 900; MinHeight = 600;
+            if (Demo.On) { Width = 1280; Height = 800; ResizeMode = Demo.Autoplay != null ? ResizeMode.NoResize : ResizeMode.CanResize; }
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI");
             FontSize = 14;
@@ -125,10 +126,20 @@ namespace Hatpick
             railTop.Children.Clear();
             railBottom.Children.Clear();
             railButtons.Clear();
-            var logo = Hats.Icon("hardhat", 26);
+            // The badge shows the hat of the repo you're looking at, or Hatpick's own hard hat.
+            var current = page == "repos" ? Find(selected) : null;
+            FrameworkElement logo;
+            string tip = "Hatpick";
+            if (current != null)
+            {
+                var acct = CommitHat(current);
+                logo = acct != null ? Hats.For(acct, 26) : current.Email.Length == 0 ? Hats.Icon("none", 26) : Ui.Icon("user", 22, "RailIcon");
+                tip = current.DisplayName + " wears " + (acct != null ? acct.label : current.Email.Length == 0 ? "no hat" : current.Email);
+            }
+            else logo = Hats.Icon("hardhat", 26);
             var logoTile = new Border { Width = 36, Height = 36, CornerRadius = new CornerRadius(18), Margin = new Thickness(0, 0, 0, 14), Child = logo };
             logoTile.Background = new SolidColorBrush(Color.FromRgb(0x2a, 0x33, 0x52));
-            logoTile.ToolTip = "Hatpick";
+            logoTile.ToolTip = tip;
             railTop.Children.Add(logoTile);
             RailButton(railTop, "overview", "Overview", "overview");
             RailButton(railTop, "repos", "Repos", "repos");
@@ -165,6 +176,15 @@ namespace Hatpick
             return b;
         }
 
+        // Used by the demo's autoplay (Demo.cs).
+        public void DemoShow(string to, string repo, string hat)
+        {
+            page = to;
+            if (repo != null) selected = repo;
+            if (hat != null) selectedHat = hat;
+            Render();
+        }
+
         public void Navigate(string to, string repo = null)
         {
             page = to;
@@ -175,6 +195,7 @@ namespace Hatpick
 
         void Render()
         {
+            BuildRail();   // the badge follows the selected repo
             Marks.Keys.Where(k => !k.StartsWith("rail-") && k != "theme" && k != "help").ToList().ForEach(k => Marks.Remove(k));
             FrameworkElement view;
             switch (page)
@@ -236,6 +257,7 @@ namespace Hatpick
                 if (t.Exception != null) { Program.Report(t.Exception.InnerException); return; }
                 gcm = t.Result.Item1;
                 reports = t.Result.Item2;
+                if (!scannedOnce) Demo.Start(this);
                 scannedOnce = true;
                 if (selected == null && reports.Count > 0) selected = reports[0].Path;
                 Render();
@@ -477,6 +499,7 @@ namespace Hatpick
             var before = new Account { label = a.label, name = a.name, email = a.email, github = a.github, hat = a.hat };
             if (!AccountEditor.Edit(this, a, settings.accounts, a, gcm)) return;
             foreach (var f in settings.folders.Where(f => f.account == before.label)) f.account = a.label;
+            if (selectedHat == before.label) selectedHat = a.label;
             int updated = 0;
             if (a.name != before.name || a.email != before.email || a.github != before.github)
                 foreach (var r in reports.Where(x => x.LocalIdentity && string.Equals(x.Email, before.email, StringComparison.OrdinalIgnoreCase)))
@@ -506,7 +529,7 @@ namespace Hatpick
         {
             var list = new List<Ui.Choice> { new Ui.Choice { Value = "", Label = noneLabel } };
             foreach (var a in settings.accounts)
-                list.Add(new Ui.Choice { Value = github ? a.github : a.label, Label = a.label, Sub = github ? a.github : a.email, Hat = a.hat });
+                list.Add(new Ui.Choice { Value = github ? a.github : a.label, Label = a.label, Sub = github ? a.github : a.email, Acct = a });
             if (github)
                 foreach (var g in gcm.Where(g => settings.AccountByGitHub(g) == null))
                     list.Add(new Ui.Choice { Value = g, Label = g, Sub = "signed in, not a hat yet", Hat = "none" });
