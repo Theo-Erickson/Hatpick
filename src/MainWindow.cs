@@ -177,12 +177,15 @@ namespace Hatpick
         }
 
         // Used by the demo's autoplay (Demo.cs).
-        public void DemoShow(string to, string repo, string hat)
+        public void DemoShow(string to, string repo, string hat, string scrollTo)
         {
             page = to;
             if (repo != null) selected = repo;
             if (hat != null) selectedHat = hat;
             Render();
+            FrameworkElement mark;
+            if (scrollTo != null && Marks.TryGetValue(scrollTo, out mark))
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, (Action)delegate { mark.BringIntoView(new Rect(0, 0, mark.ActualWidth, Math.Min(mark.ActualHeight, 420))); });
         }
 
         public void Navigate(string to, string repo = null)

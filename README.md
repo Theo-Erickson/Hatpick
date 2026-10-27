@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/media/banner.gif" alt="Hatpick" width="100%">
+  <img src=".github/readme/banner.gif" alt="Hatpick" width="100%">
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@ repo wears what it wears, and it can fix the author of commits before (or after)
 The name is a nod to a hat trick.
 
 <p align="center">
-  <img src="docs/media/hero.gif" alt="Hatpick's overview, repos and hats pages" width="90%">
+  <img src=".github/readme/hero.gif" alt="Hatpick's overview, repos and hats pages" width="90%">
 </p>
 
 > [!NOTE]
@@ -66,9 +66,12 @@ A slim rail on the left switches pages; theme and help sit at the bottom.
   Explorer right-click entry.
 - **Reset**: undo everything Hatpick changed.
 
-<p align="center">
-  <img src="docs/media/clip_hats.gif" alt="Picking hats on the hat rack" width="80%">
-</p>
+<table>
+  <tr>
+    <td align="center" width="50%"><img src=".github/readme/clip_rack.gif" alt="Picking hats on the hat rack"><br><sub>The hat rack</sub></td>
+    <td align="center" width="50%"><img src=".github/readme/clip_colors.gif" alt="A repo wearing a custom-colored hat"><br><sub>A hat in your own colors</sub></td>
+  </tr>
+</table>
 
 Every section has a **?** button that explains it. On first launch, a short setup walks you
 through signing in accounts, making hats and adding folders. **Help** can rerun the setup or
@@ -108,7 +111,7 @@ flowchart LR
 ```
 
 <p align="center">
-  <img src="docs/media/clip_repos.gif" alt="Repos page: where each setting comes from" width="80%">
+  <img src=".github/readme/clip_layers.gif" alt="Repos page: where each setting comes from" width="80%">
 </p>
 
 ## Fixing commits
@@ -134,7 +137,7 @@ flowchart TD
 > Desktop (or `git push --force-with-lease`), and anyone who pulled them will need to reset.
 
 <p align="center">
-  <img src="docs/media/clip_fix.gif" alt="Fixing the author of unpushed commits" width="80%">
+  <img src=".github/readme/clip_fix.gif" alt="Fixing the author of unpushed commits" width="80%">
 </p>
 
 ## Resetting
@@ -176,6 +179,7 @@ before rebuilding, and stick to C# 5 syntax.
 | `src/Demo.cs` | `--demo` mode and its sample data |
 | `tools/make-icon.py` | Draws `hatpick.ico` (Python with Pillow 10.1+) |
 | `tools/readme_capture/` | Records the demo for the GIFs in this README |
+| `tools/readme_media/` | Turns the recording into the GIFs (a read-only copy of a shared tool) |
 
 The icon shows the hat trick (hard hat, top hat, beanie) at 64px and up. At 48px and below,
 which covers the Start menu and taskbar, it shows just the hard hat and the beanie.
@@ -187,16 +191,20 @@ python tools\make-icon.py hatpick.ico hatpick.png
 <details>
 <summary><b>Re-recording the README media</b></summary>
 
+Needs Python 3 with Pillow, and Edge or Chrome.
+
 ```powershell
 build.cmd
-powershell -ExecutionPolicy Bypass -File tools\readme_capture\record.ps1 -Name hero  -Script tour  -Seconds 24
-powershell -ExecutionPolicy Bypass -File tools\readme_capture\record.ps1 -Name repos -Script repos -Seconds 14
-powershell -ExecutionPolicy Bypass -File tools\readme_capture\record.ps1 -Name hats  -Script hats  -Seconds 7
-powershell -ExecutionPolicy Bypass -File tools\readme_capture\record.ps1 -Name fix   -Script fix   -Seconds 5
+powershell -ExecutionPolicy Bypass -File tools\readme_capture\record.ps1
+python tools\readme_media\readme_media.py contact tools\readme_capture\readme_media.json
+python tools\readme_media\readme_media.py build   tools\readme_capture\readme_media.json
 ```
 
-The recordings use demo mode, so no real names or emails appear. Frames land in `.work\`
-(ignored by git), and `tools/readme_media` turns them into the GIFs.
+`record.ps1` plays demo mode on a fixed clock and records it (keep the window uncovered for
+about 25 seconds), so no real names or emails appear. Frames land in
+`tools\readme_capture\.work\` (ignored by git). Check `contact.png` there, then `build` writes
+the GIFs into `.github/readme/`. `tools/readme_media` is a read-only copy of a shared tool;
+`readme_media.json` says which frames go where.
 
 </details>
 

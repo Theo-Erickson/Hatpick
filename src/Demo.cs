@@ -201,56 +201,97 @@ namespace Hatpick
         }
 
         // ---------- autoplay ----------
+        //
+        // A script is a list of steps on a fixed clock, so a recording made at a known fps has
+        // each part at a known frame. tools/readme_capture/readme_media.json counts on this
+        // layout ("showcase"): a 3 s title shot of the overview, then 4 s segments.
+        // Change one and change the other.
 
-        class Step { public double Seconds; public string Page, Repo, Hat; }
+        public const double TitleSeconds = 3, SegmentSeconds = 4;
 
-        // Scripts: "tour" (everything), "overview", "repos", "hats", "fix".
-        static List<Step> Script(string name)
+        class Step { public double At; public string Page, Repo, Hat, ScrollTo; }
+
+        // Scripts: "showcase" (the README recording), "overview", "repos", "hats", "fix".
+        static List<Step> Script(string name, out double length)
         {
             var steps = new List<Step>();
-            Action<double, string, string, string> add = (sec, pg, rp, ht) => steps.Add(new Step { Seconds = sec, Page = pg, Repo = rp, Hat = ht });
+            double t = 0;
+            Action<double, string, string, string, string> add = (sec, pg, rp, ht, sc) =>
+            {
+                steps.Add(new Step { At = t, Page = pg, Repo = rp, Hat = ht, ScrollTo = sc });
+                t += sec;
+            };
             Func<string, string> repo = n => Settings.Norm(Directory.GetDirectories(Repos, n, SearchOption.AllDirectories).First());
             switch (name)
             {
                 case "overview":
-                    add(6, "overview", null, null);
+                    add(6, "overview", null, null, null);
                     break;
                 case "repos":
-                    foreach (var n in new[] { "acme-api", "acme-web", "dotfiles", "tiny-dungeon", "scratch" }) add(2.8, "repos", repo(n), null);
+                    foreach (var n in new[] { "acme-api", "acme-web", "dotfiles", "tiny-dungeon", "scratch" }) add(2.8, "repos", repo(n), null, null);
                     break;
                 case "hats":
-                    foreach (var h in new[] { "Work", "Personal", "Games" }) add(2.2, "hats", null, h);
+                    foreach (var h in new[] { "Work", "Personal", "Games" }) add(2.2, "hats", null, h, null);
                     break;
                 case "fix":
-                    add(5, "repos", repo("acme-api"), null);
+                    add(1.5, "repos", repo("acme-api"), null, null);
+                    add(3.5, "repos", repo("acme-api"), null, "commits");
                     break;
-                default:
-                    add(4, "overview", null, null);
-                    foreach (var n in new[] { "acme-api", "acme-web", "tiny-dungeon" }) add(2.6, "repos", repo(n), null);
-                    foreach (var h in new[] { "Work", "Personal", "Games" }) add(1.8, "hats", null, h);
-                    add(3, "folders", null, null);
+                default:   // "showcase"
+                    add(TitleSeconds, "overview", null, null, null);
+                    // segment 0: commits made with the wrong hat
+                    add(1.2, "repos", repo("acme-api"), null, null);
+                    add(SegmentSeconds - 1.2, "repos", repo("acme-api"), null, "commits");
+                    // segment 1: where each setting comes from
+                    add(1.2, "repos", repo("acme-web"), null, null);
+                    add(SegmentSeconds - 1.2, "repos", repo("acme-web"), null, "layers");
+                    // segment 2: a hat with custom colors
+                    add(SegmentSeconds, "repos", repo("tiny-dungeon"), null, null);
+                    // segment 3: the hat rack
+                    add(1.3, "hats", null, "Work", null);
+                    add(1.3, "hats", null, "Personal", null);
+                    add(SegmentSeconds - 2.6, "hats", null, "Games", null);
+                    // segment 4: folders
+                    add(SegmentSeconds, "folders", null, null, null);
                     break;
             }
+            length = t;
             return steps;
         }
 
-        // Steps through the script, looping, once the first scan is done.
+        // Named event the recorder (record.ps1) sets the moment it starts recording, so the
+        // script's clock and the recording's frame numbers start together.
+        const string GoEvent = "Hatpick.Demo.Go";
+
+        // Plays the script, looping, once the first scan is done.
         public static void Start(MainWindow w)
         {
             if (Autoplay == null) return;
-            var steps = Script(Autoplay);
-            int i = 0;
-            var timer = new DispatcherTimer();
-            EventHandler tick = null;
-            tick = delegate
+            double length;
+            var steps = Script(Autoplay, out length);
+            System.Threading.EventWaitHandle go = null;
+            try { System.Threading.EventWaitHandle.TryOpenExisting(GoEvent, out go); } catch { }
+
+            w.DemoShow(steps[0].Page, steps[0].Repo, steps[0].Hat, steps[0].ScrollTo);
+            var clock = new Stopwatch();
+            if (go == null) clock.Start();     // not being recorded: start now
+            int shown = 0;
+            var timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(15) };
+            timer.Tick += delegate
             {
-                var st = steps[i % steps.Count];
-                w.DemoShow(st.Page, st.Repo, st.Hat);
-                timer.Interval = TimeSpan.FromSeconds(st.Seconds);
-                i++;
+                if (!clock.IsRunning)
+                {
+                    if (!go.WaitOne(0)) return;
+                    clock.Start();
+                }
+                double now = clock.Elapsed.TotalSeconds % length;
+                int i = steps.FindLastIndex(st => st.At <= now);
+                if (i != shown)
+                {
+                    shown = i;
+                    w.DemoShow(steps[i].Page, steps[i].Repo, steps[i].Hat, steps[i].ScrollTo);
+                }
             };
-            timer.Tick += tick;
-            timer.Interval = TimeSpan.FromSeconds(1.5);   // let the first scan land
             timer.Start();
         }
     }
