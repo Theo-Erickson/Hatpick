@@ -371,13 +371,19 @@ namespace Hatpick
 
         void OpenInDesktop(RepoReport r)
         {
+            if (Demo.On)
+            {
+                // GitHub Desktop would add the made-up repo to your real list, under your real account
+                Dialogs.Info(this, "Not in the demo", "The demo's repos are made up, so they aren't opened in GitHub Desktop.");
+                return;
+            }
             try { Process.Start("x-github-client://openLocalRepo/" + Uri.EscapeDataString(r.Path)); }
             catch (Exception e) { Dialogs.Info(this, "Couldn't open GitHub Desktop", e.Message); }
         }
 
         void OpenGitBash(RepoReport r)
         {
-            try { Process.Start(new ProcessStartInfo(Git.GitBash, "--cd=\"" + r.Path + "\"") { UseShellExecute = false }); }
+            try { var psi = new ProcessStartInfo(Git.GitBash, "--cd=\"" + r.Path + "\"") { UseShellExecute = false }; Demo.Isolate(psi); Process.Start(psi); }
             catch (Exception e) { Dialogs.Info(this, "Couldn't open Git Bash", e.Message); }
         }
 

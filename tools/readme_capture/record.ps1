@@ -1,5 +1,5 @@
 <#
-Records Hatpick's demo mode into PNG frames for readme_media.
+Records Hatpick's demo mode into PNG frames, for making README GIFs.
 
     powershell -ExecutionPolicy Bypass -File tools\readme_capture\record.ps1 -Name tour -Script tour -Seconds 24
 

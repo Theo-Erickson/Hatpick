@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Theo-Erickson/Hatpick/releases"><img alt="Latest tag" src="https://img.shields.io/github/v/tag/Theo-Erickson/Hatpick?label=version&color=f08a4b"></a>
+  <a href="https://github.com/Theo-Erickson/Hatpick/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/Theo-Erickson/Hatpick?label=download&color=f08a4b"></a>
   <img alt="Windows" src="https://img.shields.io/badge/platform-Windows-2a3352">
   <img alt=".NET Framework 4.x" src="https://img.shields.io/badge/.NET%20Framework-4.x%20(WPF)-5b3a8c">
   <img alt="No sign-in" src="https://img.shields.io/badge/passwords%20seen-0-4cc38a">
@@ -81,7 +81,8 @@ take the one-minute tour. Dark and light themes are built in.
 
 1. Install [Git for Windows](https://git-scm.com/download/win). It includes Git Credential
    Manager.
-2. Download or build `Hatpick.exe` (see [Building](#building)) and run it. Nothing else to
+2. Download `Hatpick.exe` from the [latest release](https://github.com/Theo-Erickson/Hatpick/releases/latest),
+   or build it yourself (see [Building](#building)), and run it. Nothing else to
    install.
 3. Follow the setup: sign in each GitHub account once through GCM, make a hat for each, and
    point Hatpick at the folders that hold your repos.
@@ -140,6 +141,13 @@ flowchart TD
   <img src=".github/readme/clip_fix.gif" alt="Fixing the author of unpushed commits" width="80%">
 </p>
 
+### Undoing commits
+
+**Undo commits, keep the changes** takes the selected commits (and anything newer) off the
+branch while leaving their changes in your folder, ready to commit again. Use it to drop a file
+from a commit, fix a message or split commits up. It's `git reset --soft` with a backup first,
+and *Undo last change* puts the commits back.
+
 ## Resetting
 
 The first time Hatpick changes a repo's settings, it saves what the repo had in a `[hatpick]`
@@ -178,8 +186,7 @@ before rebuilding, and stick to C# 5 syntax.
 | `src/Ui.cs` | Shared building blocks, including the drawn hats and their colorable parts |
 | `src/Demo.cs` | `--demo` mode and its sample data |
 | `tools/make-icon.py` | Draws `hatpick.ico` (Python with Pillow 10.1+) |
-| `tools/readme_capture/` | Records the demo for the GIFs in this README |
-| `tools/readme_media/` | Turns the recording into the GIFs (a read-only copy of a shared tool) |
+| `tools/readme_capture/` | Records demo mode as PNG frames (the GIFs in this README were made from them) |
 
 The icon shows the hat trick (hard hat, top hat, beanie) at 64px and up. At 48px and below,
 which covers the Start menu and taskbar, it shows just the hard hat and the beanie.
@@ -187,26 +194,6 @@ which covers the Start menu and taskbar, it shows just the hard hat and the bean
 ```powershell
 python tools\make-icon.py hatpick.ico hatpick.png
 ```
-
-<details>
-<summary><b>Re-recording the README media</b></summary>
-
-Needs Python 3 with Pillow, and Edge or Chrome.
-
-```powershell
-build.cmd
-powershell -ExecutionPolicy Bypass -File tools\readme_capture\record.ps1
-python tools\readme_media\readme_media.py contact tools\readme_capture\readme_media.json
-python tools\readme_media\readme_media.py build   tools\readme_capture\readme_media.json
-```
-
-`record.ps1` plays demo mode on a fixed clock and records it (keep the window uncovered for
-about 25 seconds), so no real names or emails appear. Frames land in
-`tools\readme_capture\.work\` (ignored by git). Check `contact.png` there, then `build` writes
-the GIFs into `.github/readme/`. `tools/readme_media` is a read-only copy of a shared tool;
-`readme_media.json` says which frames go where.
-
-</details>
 
 ## History
 

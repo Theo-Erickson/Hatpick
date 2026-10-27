@@ -184,6 +184,74 @@ namespace Hatpick
             return plan;
         }
 
+        // Undoing commits: the branch steps back to before the oldest selected commit (and
+        // everything newer goes with it), while their changes stay in your folder, staged,
+        // ready to commit again. Like "git reset --soft", with a backup first.
+        public static RewritePlan PlanUncommit(string repo, BranchState st, HashSet<string> selected, Settings s)
+        {
+            var plan = new RewritePlan();
+            if (!st.Commits.Any(c => selected.Contains(c.Sha))) { plan.Blockers.Add("Select at least one commit."); return plan; }
+            if (st.Branch == null) plan.Blockers.Add("You're not on a branch (detached HEAD). Check out a branch first.");
+            if (st.Busy) plan.Blockers.Add("A rebase, merge or cherry-pick is in progress. Finish or abort it first.");
+            var range = Range(st, selected);
+            plan.RangeCount = range.Count;
+            if (range.Any(c => c.IsMerge) || !Straight(range)) plan.Blockers.Add("The commits include a merge. Hatpick only undoes a straight line of commits on this branch.");
+            if (range.Count > 0 && range[range.Count - 1].Parents.Length == 0) plan.Blockers.Add("That includes the repo's very first commit, which has nothing before it to go back to.");
+            if (range.Count == st.Commits.Count && st.Commits.Count >= 60) plan.Blockers.Add("That reaches further back than Hatpick has loaded. Pick more recent commits.");
+            if (plan.Blockers.Count > 0) return plan;
+
+            int extra = range.Count(c => !selected.Contains(c.Sha));
+            if (extra > 0)
+                plan.Warnings.Add(new Issue(Level.Warn, "This also undoes " + extra + " newer commit(s) you didn't select. Undo always works back from the newest commit."));
+            if (range.Any(c => c.Pushed))
+            {
+                plan.NeedsAck = true;
+                plan.Warnings.Add(new Issue(Level.Warn, range.Count(c => c.Pushed) + " of these commits are already pushed. When you commit again you'll need to " +
+                    "force push (GitHub Desktop offers \"Force push\"), and anyone who already pulled this branch will need to reset their copy."));
+                if (st.Upstream != null && st.Upstream == st.DefaultRemoteBranch)
+                    plan.Warnings.Add(new Issue(Level.Warn, st.Upstream + " is the repo's default branch. Others are most likely to have it, and it may be protected against force pushes on GitHub."));
+            }
+            else
+                plan.Warnings.Add(new Issue(Level.Info, "None of these commits are pushed yet, so nobody else has them."));
+            var others = range.Where(c => !IsMine(c, s)).ToList();
+            if (others.Count > 0)
+            {
+                plan.NeedsAck = true;
+                plan.Warnings.Add(new Issue(Level.Warn, others.Count + " of these commits are by other people (" + string.Join(", ", others.Select(c => c.AuthorName).Distinct()) +
+                    "). If you commit their changes again, they're credited to you instead."));
+            }
+            if (range.Any(c => c.CoAuthors.Count > 0))
+                plan.Warnings.Add(new Issue(Level.Info, "Co-authored-by lines go with the old commits. Add them back in the new commit's message if you want to keep them."));
+            if (st.Dirty)
+                plan.Warnings.Add(new Issue(Level.Info, "You also have uncommitted changes. They stay as they are, mixed in with the undone ones."));
+            plan.Warnings.Add(new Issue(Level.Info, "Files in your folder don't change. The changes from " + (range.Count == 1 ? "this commit" : "these " + range.Count + " commits") +
+                " show up as uncommitted changes in GitHub Desktop, ready to commit again. A backup is saved first, so Undo can put the commits back."));
+            return plan;
+        }
+
+        // Returns the backup ref name.
+        public static string Uncommit(string repo, BranchState st, HashSet<string> selected)
+        {
+            var range = Range(st, selected);
+            if (range.Count == 0) throw new Exception("Nothing selected.");
+            var oldest = range[range.Count - 1];
+            if (oldest.Parents.Length == 0) throw new Exception("That's the first commit.");
+            string oldHead = Git.InRepo(repo, "rev-parse", "HEAD").Out.Trim();
+            if (oldHead != st.Commits[0].Sha) throw new Exception("The branch changed since Hatpick read it. Refresh and try again.");
+            string backup = SaveBackup(repo, st.Branch, oldHead, "hatpick: backup before undoing commits");
+            var r = Git.InRepo(repo, "reset", "-q", "--soft", oldest.Parents[0]);
+            if (r.Code != 0) throw new Exception("Undoing the commits failed: " + r.Err + "\n\nNothing was changed.");
+            return backup;
+        }
+
+        static string SaveBackup(string repo, string branch, string sha, string why)
+        {
+            string backup = "refs/hatpick/backup/" + branch + "/" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            var b = Git.InRepo(repo, "update-ref", "-m", why, backup, sha);
+            if (b.Code != 0) throw new Exception("Couldn't save a backup: " + b.Err);
+            return backup;
+        }
+
         // ---------- rewriting ----------
 
         static GitResult Run(string repo, Dictionary<string, string> env, string input, params string[] args)
@@ -196,6 +264,7 @@ namespace Hatpick
                 RedirectStandardInput = input != null, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8
             };
             psi.EnvironmentVariables["GIT_TERMINAL_PROMPT"] = "0";
+            Demo.Isolate(psi);
             if (env != null) foreach (var kv in env) psi.EnvironmentVariables[kv.Key] = kv.Value;
             using (var p = Process.Start(psi))
             {
@@ -256,9 +325,7 @@ namespace Hatpick
             string oldHead = Git.InRepo(repo, "rev-parse", "HEAD").Out.Trim();
             if (oldHead != st.Commits[0].Sha) throw new Exception("The branch changed since Hatpick read it. Refresh and try again.");
 
-            string backup = "refs/hatpick/backup/" + st.Branch + "/" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
-            var b = Git.InRepo(repo, "update-ref", "-m", "hatpick: backup before rewrite", backup, oldHead);
-            if (b.Code != 0) throw new Exception("Couldn't save a backup: " + b.Err);
+            string backup = SaveBackup(repo, st.Branch, oldHead, "hatpick: backup before rewrite");
 
             var oldestParents = range[range.Count - 1].Parents;
             string parent = oldestParents.Length > 0 ? oldestParents[0] : null;
@@ -309,12 +376,15 @@ namespace Hatpick
             return list;
         }
 
-        // Puts the branch back to the backup. Refuses if it would lose uncommitted changes.
+        // Puts the branch back to the backup. Never loses uncommitted changes: after undoing
+        // commits (the branch is behind the backup), only the branch moves and your files stay;
+        // otherwise it refuses while you have uncommitted changes.
         public static void Undo(string repo, BranchState st, Backup b)
         {
             if (st.Branch == null) throw new Exception("Check out the branch first.");
-            if (st.Dirty) throw new Exception("You have uncommitted changes. Commit or stash them first.");
-            var r = Git.InRepo(repo, "reset", "--keep", b.Sha);
+            bool behind = Git.InRepo(repo, "merge-base", "--is-ancestor", "HEAD", b.Sha).Code == 0;
+            if (st.Dirty && !behind) throw new Exception("You have uncommitted changes. Commit or stash them first.");
+            var r = Git.InRepo(repo, "reset", "-q", behind ? "--mixed" : "--keep", b.Sha);   // --mixed: moves the branch and the staging area, never your files
             if (r.Code != 0) throw new Exception("Undo failed: " + r.Err);
             Git.InRepo(repo, "update-ref", "-d", b.Ref);
         }

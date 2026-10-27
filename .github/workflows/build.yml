@@ -1,0 +1,50 @@
+# Builds Hatpick.exe on GitHub's Windows machines with build.cmd (the .NET Framework C#
+# compiler that ships with Windows, same as on your PC).
+#
+# - Every push to main and every pull request: build, and keep Hatpick.exe as a download
+#   on the run's page for 14 days (Actions > the run > Artifacts). Catches a broken build.
+# - Pushing a version tag (v3.1-hat-rack, v3.2, ...): build, then publish a GitHub Release
+#   for that tag with Hatpick.exe attached. Re-pushing a tag replaces the exe.
+# - Actions > Build > Run workflow: build by hand, without a release.
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # to create the release on tag pushes
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Hatpick.exe
+        shell: cmd
+        run: call build.cmd
+
+      - name: Keep the build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hatpick
+          path: Hatpick.exe
+          retention-days: 14
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" Hatpick.exe --clobber
+          else
+            gh release create "$TAG" Hatpick.exe --title "Hatpick $TAG" --generate-notes \
+              --notes "Download **Hatpick.exe** below and run it - nothing to install. Needs Git for Windows (git-scm.com)."
+          fi

@@ -338,7 +338,8 @@ namespace Hatpick
             var backups = History.Backups(r.Path, st.Branch);
             if (backups.Count > 0)
             {
-                var undo = Ui.Btn("Undo last rewrite (" + backups[0].When + ")", delegate { UndoRewrite(r, st, backups[0]); });
+                var undo = Ui.Btn("Undo last change (" + backups[0].When + ")", delegate { UndoRewrite(r, st, backups[0]); });
+                undo.ToolTip = "Puts the branch back as it was before Hatpick's last rewrite or undo of commits";
                 undo.Margin = new Thickness(0, 0, 6, 0);
                 right.Children.Add(undo);
             }
@@ -397,6 +398,22 @@ namespace Hatpick
                 Ui.Text("Changes the author and/or removes Co-authored-by lines. Files don't change. Hatpick saves a backup first and never pushes for you.", 12, "Muted"),
                 controls), 16);
             sp.Children.Add(tools);
+
+            // undo commits, keeping their changes
+            int oldestSel = -1;
+            for (int i = 0; i < st.Commits.Count; i++) if (commitSel.Contains(st.Commits[i].Sha)) oldestSel = i;
+            int undoCount = oldestSel + 1;
+            var uncommit = Ui.Btn(undoCount == 0 ? "Select commits above" : "Undo " + undoCount + " commit(s)...", delegate { ConfirmUncommit(r); });
+            uncommit.IsEnabled = undoCount > 0;
+            uncommit.Height = 36;
+            uncommit.HorizontalAlignment = HorizontalAlignment.Left;
+            var undoPanel = Ui.Panel(Ui.Stack(8,
+                Ui.TitleWithHelp(Ui.Text("Undo commits, keep the changes", 14, "Text", FontWeights.SemiBold), "uncommit"),
+                Ui.Text("Takes the selected commits, and any newer ones, off the branch. Their changes stay in your folder, ready to commit again: " +
+                    "for example without some files, or split differently. Hatpick saves a backup first and never pushes for you.", 12, "Muted"),
+                uncommit), 16);
+            undoPanel.Margin = new Thickness(0, 12, 0, 0);
+            sp.Children.Add(undoPanel);
             return sp;
         }
 
@@ -496,10 +513,58 @@ namespace Hatpick
             Render();
         }
 
+        void ConfirmUncommit(RepoReport r)
+        {
+            var fresh = History.Read(r.Path);
+            commitCache[Settings.Norm(r.Path)] = fresh;
+            var sel = new HashSet<string>(commitSel.Where(s => fresh.Commits.Any(c => c.Sha == s)));
+            var plan = History.PlanUncommit(r.Path, fresh, sel, settings);
+            if (plan.Blockers.Count > 0)
+            {
+                Dialogs.Ask(this, "Can't undo these commits", Dialogs.IssueList(plan.Blockers.Select(b => new Issue(Level.Error, b))), "OK", null, true);
+                return;
+            }
+            var range = fresh.Commits.Take(plan.RangeCount).ToList();
+            var w = new ThemedWindow(this, "Undo commits", 600);
+            bool go = false;
+            var names = new StackPanel();
+            foreach (var c in range.Take(6)) names.Children.Add(Ui.Text("•  " + c.Subject + "  (" + c.Short + ")", 13, "Sub"));
+            if (range.Count > 6) names.Children.Add(Ui.Text("•  and " + (range.Count - 6) + " more", 13, "Muted"));
+            var body = Ui.Stack(12, Ui.Text("Before you undo", 18, "Text", FontWeights.SemiBold),
+                Ui.Text("Take " + range.Count + " commit(s) off " + fresh.Branch + " and keep their changes:", 14, "Sub"), names, Dialogs.IssueList(plan.Warnings));
+            var ok = Ui.Btn(plan.NeedsAck ? "Undo anyway" : "Undo commits", delegate { go = true; w.Close(); }, "BtnPrimary");
+            if (plan.NeedsAck)
+            {
+                var ack = new CheckBox { Content = "I understand this changes shared history", Margin = new Thickness(0, 4, 0, 0) };
+                ok.IsEnabled = false;
+                ack.Click += delegate { ok.IsEnabled = ack.IsChecked == true; };
+                body.Children.Add(ack);
+            }
+            w.Layout(body, Ui.Btn("Cancel", w.Close), ok);
+            w.ShowDialog();
+            if (!go) return;
+
+            bool anyPushed = range.Any(c => c.Pushed);
+            try
+            {
+                History.Uncommit(r.Path, fresh, sel);
+                commitSel.Clear();
+                commitCache.Remove(Settings.Norm(r.Path));
+                if (range.Count == 1) try { Clipboard.SetText(range[0].Body.Trim().Length > 0 ? range[0].Body.Trim() : range[0].Subject); } catch { }
+                Dialogs.Info(this, "Done", "Undid " + range.Count + " commit(s). Their changes are in your folder as uncommitted changes.\n\n" +
+                    "Next: in GitHub Desktop, uncheck anything you want to leave out and commit again." +
+                    (range.Count == 1 ? " The old commit message is on your clipboard." : "") +
+                    (anyPushed ? " These were already pushed, so push with Force push afterwards." : "") +
+                    "\n\nChanged your mind? \"Undo last change\" above the commit list puts the commits back.");
+            }
+            catch (Exception e) { Dialogs.Info(this, "Undo didn't happen", e.Message); }
+            Render();
+        }
+
         void UndoRewrite(RepoReport r, BranchState st, Backup b)
         {
-            if (!Dialogs.Ask(this, "Undo the rewrite?", "Puts " + st.Branch + " back exactly as it was on " + b.When + ". " +
-                "Any commits you made after the rewrite are dropped from the branch, and if you already force pushed, you'll need to force push again.", "Undo")) return;
+            if (!Dialogs.Ask(this, "Put the branch back?", "Puts " + st.Branch + " back exactly as it was on " + b.When + ", before Hatpick's last change. " +
+                "Any commits you made since are dropped from the branch (your files stay), and if you already force pushed, you'll need to force push again.", "Put it back")) return;
             try
             {
                 History.Undo(r.Path, History.Read(r.Path), b);

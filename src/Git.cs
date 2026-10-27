@@ -24,8 +24,10 @@ namespace Hatpick
     {
         public const string CredKey = "credential.https://github.com.username";
         public static readonly string Exe = Find();
-        static readonly string Home = Demo.On ? Demo.HomeDir : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        public static readonly string IncludeDir = Path.Combine(Home, ".hatpick");
+        // Properties, not fields: a static field can be set before Main reads --demo, which once
+        // sent the demo's made-up hats into your real ~/.hatpick.
+        static string Home { get { return Demo.On ? Demo.HomeDir : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile); } }
+        public static string IncludeDir { get { return Path.Combine(Home, ".hatpick"); } }
         // Include folders this app has written to, including under its earlier names.
         public static readonly string[] OurIncludeDirs = { ".hatpick/", ".gitpicky/", ".gitpicker/" };
 
@@ -106,6 +108,7 @@ namespace Hatpick
                 WorkingDirectory = Home
             };
             psi.EnvironmentVariables["GIT_TERMINAL_PROMPT"] = "0";   // never block waiting for input
+            Demo.Isolate(psi);
             using (var p = Process.Start(psi))
             {
                 var err = p.StandardError.ReadToEndAsync();

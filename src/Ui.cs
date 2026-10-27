@@ -323,7 +323,7 @@ namespace Hatpick
             { "bowler", new[] { new Part("main", "Body", "#6b4a2e"), new Part("trim", "Band", "#2e2118") } },
         };
 
-        public static readonly string ImageDir = System.IO.Path.Combine(Demo.On ? Demo.Root : AppDomain.CurrentDomain.BaseDirectory, "hats");
+        public static string ImageDir { get { return System.IO.Path.Combine(Demo.On ? Demo.Root : AppDomain.CurrentDomain.BaseDirectory, "hats"); } }
 
         public static string TintKey(string kind)
         {

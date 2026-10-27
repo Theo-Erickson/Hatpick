@@ -50,12 +50,20 @@ namespace Hatpick
             {
                 Root = Path.Combine(Path.GetTempPath(), "Hatpick demo");
                 HomeDir = Path.Combine(Root, "home");
-                Environment.SetEnvironmentVariable("HOME", HomeDir);
-                Environment.SetEnvironmentVariable("GIT_CONFIG_GLOBAL", Path.Combine(HomeDir, ".gitconfig"));
-                Environment.SetEnvironmentVariable("GIT_CONFIG_NOSYSTEM", "1");
-                Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", Path.Combine(HomeDir, ".config"));
             }
             return rest.ToArray();
+        }
+
+        // Points one git process at the demo's own config. Only git that Hatpick runs gets this,
+        // never Hatpick's own environment: apps it opens (GitHub Desktop, Explorer) would inherit
+        // it and keep using the demo's made-up identity until they restart.
+        public static void Isolate(ProcessStartInfo psi)
+        {
+            if (!On) return;
+            psi.EnvironmentVariables["HOME"] = HomeDir;
+            psi.EnvironmentVariables["GIT_CONFIG_GLOBAL"] = Path.Combine(HomeDir, ".gitconfig");
+            psi.EnvironmentVariables["GIT_CONFIG_NOSYSTEM"] = "1";
+            psi.EnvironmentVariables["XDG_CONFIG_HOME"] = Path.Combine(HomeDir, ".config");
         }
 
         static string Repos { get { return Path.Combine(Root, "repos"); } }
@@ -63,6 +71,10 @@ namespace Hatpick
         // Builds the sample accounts, folders and repos. Returns the settings to open with.
         public static Settings Build()
         {
+            // Refuse to build anything unless every place the demo writes is inside its own folder.
+            foreach (var path in new[] { Hatpick.Git.IncludeDir, Settings.FilePath, Hats.ImageDir })
+                if (!Path.GetFullPath(path).StartsWith(Path.GetFullPath(Root) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                    throw new Exception("Demo stopped before touching anything: " + path + " is outside " + Root + ".");
             if (Directory.Exists(Root))
                 try { ForceDelete(Root); } catch { }
             Directory.CreateDirectory(HomeDir);
@@ -182,6 +194,7 @@ namespace Hatpick
             {
                 UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true,
             };
+            Isolate(psi);
             if (env != null) foreach (var kv in env) psi.EnvironmentVariables[kv.Key] = kv.Value;
             using (var p = Process.Start(psi))
             {

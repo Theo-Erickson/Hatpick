@@ -42,10 +42,11 @@ namespace Hatpick
         public bool setupDone { get; set; }
         public string theme { get; set; }                  // "dark" or "light"
 
-        static readonly string Here = Demo.On ? Demo.Root : AppDomain.CurrentDomain.BaseDirectory;
-        public static readonly string FilePath = Path.Combine(Here, "hatpick.json");
+        // Properties, not fields, so --demo is known before any path is worked out.
+        static string Here { get { return Demo.On ? Demo.Root : AppDomain.CurrentDomain.BaseDirectory; } }
+        public static string FilePath { get { return Path.Combine(Here, "hatpick.json"); } }
         // Settings files from the app's earlier names (Gitpicky, GitPicker), newest first.
-        static readonly string[] OldFiles = { Path.Combine(Here, "gitpicky.json"), Path.Combine(Here, "gitpicker.json") };
+        static string[] OldFiles { get { return new[] { Path.Combine(Here, "gitpicky.json"), Path.Combine(Here, "gitpicker.json") }; } }
 
         public static bool Exists { get { return File.Exists(FilePath); } }
         public static bool OldExists { get { return OldFiles.Any(File.Exists); } }

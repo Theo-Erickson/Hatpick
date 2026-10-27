@@ -66,6 +66,13 @@ namespace Hatpick
             { "reset", new Topic("Resetting",
                 "The first time Hatpick changes a repo, it saves whatever the repo had set itself. Reset puts that back exactly - for one repo, or every repo at once - " +
                 "and can also remove the folder defaults from your global .gitconfig.\n\nYour commits, branches and Git Credential Manager sign-ins are never touched.") },
+
+            { "uncommit", new Topic("Undo commits, keep the changes",
+                "Takes commits off the branch without touching your files: their changes come back as uncommitted changes, so you can commit them again " +
+                "differently - leave out a file, fix the message, or split them up. It's the same as \"git reset --soft\".\n\n" +
+                "It works back from the newest commit, so undoing an older commit also undoes everything after it. If the commits were already pushed, " +
+                "you'll need to force push once you've committed again.\n\n" +
+                "Hatpick saves a backup first. \"Undo last change\" above the commit list puts the commits back, and keeps any changes you've made since.") },
         };
     }
 }
