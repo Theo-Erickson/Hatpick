@@ -106,12 +106,12 @@ namespace Hatpick
         bool saved;
 
         Border preview;
-        StackPanel colorRows;
+        StackPanel colorRows, bgRow;
         TextBlock pictureNote;
         Button removePicture;
 
         AccountEditor(Window owner, Account target, List<Account> all, Account self, List<string> gcm)
-            : base(owner, self == null ? "Add a hat" : "Edit hat", 600)
+            : base(owner, self == null ? "Add a hat" : "Edit hat", 660)
         {
             this.target = target; this.all = all; this.self = self;
             hat = string.IsNullOrEmpty(target.hat) ? HatKinds.DefaultFor(all.Count) : target.hat;
@@ -124,7 +124,7 @@ namespace Hatpick
 
             // preview on the left, hat kinds + colors + picture on the right
             var look = new DockPanel { Margin = new Thickness(0, 0, 0, 16) };
-            preview = new Border { Width = 112, Height = 112, CornerRadius = new CornerRadius(26), Margin = new Thickness(0, 0, 20, 0), VerticalAlignment = VerticalAlignment.Top };
+            preview = new Border { Width = 112, Height = 112, CornerRadius = new CornerRadius(26), Margin = new Thickness(0, 0, 28, 0), VerticalAlignment = VerticalAlignment.Top };
             DockPanel.SetDock(preview, Dock.Left);
             look.Children.Add(preview);
 
@@ -150,8 +150,11 @@ namespace Hatpick
             right.Children.Add(hats);
 
             right.Children.Add(Ui.Text("Colors", 12, "Muted"));
-            colorRows = new StackPanel { Margin = new Thickness(0, 6, 0, 8) };
+            colorRows = new StackPanel { Margin = new Thickness(0, 8, 0, 4) };
             right.Children.Add(colorRows);
+            right.Children.Add(Ui.Text("Background", 12, "Muted"));
+            bgRow = new StackPanel { Margin = new Thickness(0, 8, 0, 10) };
+            right.Children.Add(bgRow);
 
             right.Children.Add(Ui.Text("Picture", 12, "Muted"));
             removePicture = Ui.Btn("Remove picture", delegate { image = null; newPicture = null; Refresh(); }, "BtnGhost");
@@ -189,7 +192,7 @@ namespace Hatpick
             Refresh();
             var ok = Ui.Btn("Save", Save, "BtnPrimary");
             ok.IsDefault = true;
-            Layout(new ScrollViewer { Content = sp, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = 640 }, Ui.Btn("Cancel", Close), ok);
+            Layout(new ScrollViewer { Content = sp, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = 700 }, Ui.Btn("Cancel", Close), ok);
             Loaded += delegate { label.Focus(); };
         }
 
@@ -202,22 +205,8 @@ namespace Hatpick
         {
             string pic = PicturePath;
             FrameworkElement art;
-            if (pic != null)
-            {
-                art = LoadPicture(pic, 80);
-                preview.SetResourceReference(Border.BackgroundProperty, "Input");
-            }
-            else
-            {
-                art = Hats.Icon(hat, 80, colors);
-                string main;
-                if (colors.TryGetValue("main", out main))
-                {
-                    var c = ((SolidColorBrush)new BrushConverter().ConvertFromString(main)).Color;
-                    preview.Background = new SolidColorBrush(Color.FromArgb(58, c.R, c.G, c.B));
-                }
-                else preview.SetResourceReference(Border.BackgroundProperty, Hats.TintKey(hat));
-            }
+            art = pic != null ? LoadPicture(pic, 80) : Hats.Icon(hat, 80, colors);
+            Hats.PaintTile(preview, hat, colors, pic != null);
             art.HorizontalAlignment = HorizontalAlignment.Center;
             art.VerticalAlignment = VerticalAlignment.Center;
             preview.Child = art;
@@ -227,7 +216,9 @@ namespace Hatpick
             colorRows.IsEnabled = pic == null;
             Hats.Part[] parts;
             if (Hats.Parts.TryGetValue(hat, out parts))
-                foreach (var p in parts) colorRows.Children.Add(ColorRow(p));
+                foreach (var p in parts) colorRows.Children.Add(ColorRow(p.Key, p.Name, Hats.Color(hat, null, p.Key)));
+            bgRow.Children.Clear();
+            bgRow.Children.Add(ColorRow("bg", "Tile", TileDefault(pic != null)));
 
             removePicture.Visibility = pic != null ? Visibility.Visible : Visibility.Collapsed;
             pictureNote.Text = pic != null
@@ -235,17 +226,35 @@ namespace Hatpick
                 : "PNG, JPG or ICO. Square pictures look best. Used instead of the drawn hat.";
         }
 
-        FrameworkElement ColorRow(Hats.Part part)
+        // The color the tile behind the hat gets when no background is picked.
+        string TileDefault(bool picture)
         {
-            string current = Hats.Color(hat, colors, part.Key);
-            bool custom = colors.ContainsKey(part.Key);
+            var probe = new Border();
+            Hats.PaintTile(probe, hat, colors.Where(kv => kv.Key != "bg").ToDictionary(kv => kv.Key, kv => kv.Value), picture);
+            var b = probe.Background as SolidColorBrush ?? TryFindResource(picture ? "Input" : Hats.TintKey(hat)) as SolidColorBrush;
+            if (b == null) return "#2a2d3a";
+            var c = b.Color;
+            if (c.A < 255)   // a see-through tint: show what it looks like over the window
+            {
+                var bg = (TryFindResource("Bg") as SolidColorBrush ?? new SolidColorBrush(Colors.Black)).Color;
+                Func<byte, byte, byte> mix = (f, k) => (byte)((f * c.A + k * (255 - c.A)) / 255);
+                c = Color.FromRgb(mix(c.R, bg.R), mix(c.G, bg.G), mix(c.B, bg.B));
+            }
+            return string.Format("#{0:x2}{1:x2}{2:x2}", c.R, c.G, c.B);
+        }
 
-            var swatch = new Button { Width = 34, Height = 26, Padding = new Thickness(0), Cursor = Cursors.Hand, ToolTip = "Pick a color for the " + part.Name.ToLower() };
+        FrameworkElement ColorRow(string key, string caption, string fallback)
+        {
+            var part = new { Key = key, Name = caption };
+            bool custom = colors.ContainsKey(key);
+            string current = custom ? colors[key] : fallback;
+
+            var swatch = new Button { Width = 46, Height = 34, Padding = new Thickness(0), Margin = new Thickness(0, 0, 10, 0), Cursor = Cursors.Hand, ToolTip = "Pick a color for the " + part.Name.ToLower() };
             swatch.Style = Ui.Style("Btn");
-            swatch.Content = new Border { Width = 22, Height = 16, CornerRadius = new CornerRadius(4), Background = Brush(current), BorderBrush = new SolidColorBrush(Color.FromArgb(70, 0, 0, 0)), BorderThickness = new Thickness(1) };
+            swatch.Content = new Border { Width = 28, Height = 20, CornerRadius = new CornerRadius(5), Background = Brush(current), BorderBrush = new SolidColorBrush(Color.FromArgb(70, 0, 0, 0)), BorderThickness = new Thickness(1) };
             System.Windows.Automation.AutomationProperties.SetName(swatch, part.Name + " color");
 
-            var hex = new TextBox { Text = current, Width = 92, Height = 28, Margin = new Thickness(8, 0, 0, 0), FontFamily = new FontFamily("Cascadia Mono, Consolas"), VerticalContentAlignment = VerticalAlignment.Center };
+            var hex = new TextBox { Text = current, Width = 112, Height = 34, Padding = new Thickness(10, 0, 10, 0), MaxLength = 7, FontFamily = new FontFamily("Cascadia Mono, Consolas"), VerticalContentAlignment = VerticalAlignment.Center };
             System.Windows.Automation.AutomationProperties.SetName(hex, part.Name + " color, hex");
             Action commitHex = delegate
             {
@@ -257,33 +266,33 @@ namespace Hatpick
             hex.KeyDown += (s, e) => { if (e.Key == Key.Enter) { commitHex(); e.Handled = true; } };
 
             var popup = new System.Windows.Controls.Primitives.Popup { PlacementTarget = swatch, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom, StaysOpen = false, AllowsTransparency = true };
-            var grid = new WrapPanel { Width = 8 * 28 };
+            var grid = new WrapPanel { Width = 8 * 36 };
             foreach (var c in Palette)
             {
                 var col = c;
-                var b = new Button { Width = 24, Height = 24, Margin = new Thickness(2), Padding = new Thickness(0), Cursor = Cursors.Hand, ToolTip = col, Style = Ui.Style("Btn") };
-                b.Content = new Border { Width = 18, Height = 18, CornerRadius = new CornerRadius(9), Background = Brush(col) };
+                var b = new Button { Width = 30, Height = 30, Margin = new Thickness(3), Padding = new Thickness(0), Cursor = Cursors.Hand, ToolTip = col, Style = Ui.Style("Btn") };
+                b.Content = new Border { Width = 22, Height = 22, CornerRadius = new CornerRadius(11), Background = Brush(col) };
                 System.Windows.Automation.AutomationProperties.SetName(b, col);
                 b.Click += delegate { popup.IsOpen = false; colors[part.Key] = col; colorsChanged(); };
                 grid.Children.Add(b);
             }
-            var card = new Border { Padding = new Thickness(8), CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(1), Child = grid, Margin = new Thickness(0, 4, 0, 0) };
+            var card = new Border { Padding = new Thickness(10), CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(1), Child = grid, Margin = new Thickness(0, 4, 0, 0) };
             card.SetResourceReference(Border.BackgroundProperty, "Panel");
             card.SetResourceReference(Border.BorderBrushProperty, "Border");
             popup.Child = card;
             swatch.Click += delegate { popup.IsOpen = true; };
 
             var row = Ui.Row(0, Gap(Ui.Text(part.Name, 13, "Sub"), 0, 0), swatch, hex);
-            ((FrameworkElement)row.Children[0]).Width = 74;
+            ((FrameworkElement)row.Children[0]).Width = 96;
             ((FrameworkElement)row.Children[0]).VerticalAlignment = VerticalAlignment.Center;
             if (custom)
             {
                 var reset = Ui.Btn("Reset", delegate { colors.Remove(part.Key); colorsChanged(); }, "BtnGhost");
-                reset.Height = 26; reset.Margin = new Thickness(6, 0, 0, 0);
-                reset.ToolTip = "Back to " + Hats.Color(hat, null, part.Key);
+                reset.Height = 34; reset.Margin = new Thickness(10, 0, 0, 0);
+                reset.ToolTip = key == "bg" ? "Back to the theme's background" : "Back to " + fallback;
                 row.Children.Add(reset);
             }
-            row.Margin = new Thickness(0, 0, 0, 6);
+            row.Margin = new Thickness(0, 0, 0, 10);
             row.Children.Add(popup);
             return row;
         }

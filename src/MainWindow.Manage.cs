@@ -80,8 +80,9 @@ namespace Hatpick
         {
             const double Slot = 132;
             var g = new Grid { HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(10, 6, 10, 4) };
-            g.RowDefinitions.Add(new RowDefinition { Height = new GridLength(100) });   // hats
-            g.RowDefinitions.Add(new RowDefinition { Height = new GridLength(12) });    // pegs
+            const double PegH = 30, Tuck = 9;     // the hat sits over the top of its peg
+            g.RowDefinitions.Add(new RowDefinition { Height = new GridLength(92) });    // hats
+            g.RowDefinitions.Add(new RowDefinition { Height = new GridLength(PegH) });  // pegs
             g.RowDefinitions.Add(new RowDefinition { Height = new GridLength(18) });    // the bar
             g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });       // labels
             int n = settings.accounts.Count + 1;
@@ -105,7 +106,10 @@ namespace Hatpick
                 var a = isAdd ? null : settings.accounts[i];
                 bool on = a != null && a.label == selectedHat || a != null && selectedHat == null && i == 0;
 
-                var peg = new Border { Width = 12, CornerRadius = new CornerRadius(3, 3, 0, 0), Background = wood, HorizontalAlignment = HorizontalAlignment.Center };
+                // a peg: a post up from the bar with a round knob on top
+                var peg = new Grid { Width = 16, HorizontalAlignment = HorizontalAlignment.Center };
+                peg.Children.Add(new Border { Width = 9, Margin = new Thickness(0, 6, 0, -2), Background = wood, HorizontalAlignment = HorizontalAlignment.Center });
+                peg.Children.Add(new Ellipse { Width = 16, Height = 12, Fill = wood, VerticalAlignment = VerticalAlignment.Top });
                 Grid.SetRow(peg, 1); Grid.SetColumn(peg, i);
                 g.Children.Add(peg);
 
@@ -120,6 +124,7 @@ namespace Hatpick
                     ic.HorizontalAlignment = HorizontalAlignment.Center;
                     plus.Children.Add(ic);
                     hatBtn.Content = plus;
+                    hatBtn.Margin = new Thickness(0, 0, 0, PegH - Tuck - 6 + 2);
                     hatBtn.ToolTip = "Add a hat";
                     hatBtn.Click += delegate { AddAccount(); };
                 }
@@ -129,16 +134,19 @@ namespace Hatpick
                     var hat = Hats.For(a, 80);
                     hatBtn.Content = hat;
                     hatBtn.ToolTip = a.label + "  -  " + a.email + "\nClick to see it, double-click to edit";
-                    if (on)
-                    {
-                        hatBtn.RenderTransform = new TranslateTransform(0, -6);   // the picked hat lifts off its peg a little
-                        hat.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 16, ShadowDepth = 6, Opacity = 0.45 };
-                    }
+                    // seat the hat's brim on the peg: drop the empty space under the drawing
+                    double gap = (Hats.ImagePath(a) != null ? 0.04 : Hats.BottomGap(a.hat)) * 80 + 6;
+                    hatBtn.Margin = new Thickness(0, 0, 0, PegH - Tuck - gap);
+                    var accent = TryFindResource("Accent") as SolidColorBrush;
+                    hat.Effect = on && accent != null
+                        ? new System.Windows.Media.Effects.DropShadowEffect { Color = accent.Color, BlurRadius = 22, ShadowDepth = 0, Opacity = 0.75 }   // the picked hat glows
+                        : new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 6, ShadowDepth = 2, Direction = 270, Opacity = 0.35 };
                     hatBtn.Click += delegate { selectedHat = acct.label; Render(); };
                     hatBtn.MouseDoubleClick += delegate { EditAccount(acct); };
                 }
                 System.Windows.Automation.AutomationProperties.SetName(hatBtn, isAdd ? "Add a hat" : a.label + " hat");
-                Grid.SetRow(hatBtn, 0); Grid.SetColumn(hatBtn, i);
+                Grid.SetRow(hatBtn, 0); Grid.SetRowSpan(hatBtn, 2); Grid.SetColumn(hatBtn, i);
+                Panel.SetZIndex(hatBtn, 2);
                 g.Children.Add(hatBtn);
 
                 int count = a == null ? 0 : reports.Count(r => string.Equals(r.Email, a.email, StringComparison.OrdinalIgnoreCase));

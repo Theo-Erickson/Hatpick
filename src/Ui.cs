@@ -461,14 +461,38 @@ namespace Hatpick
         {
             if (a == null) return Tile("none", size);
             var b = new Border { Width = size, Height = size, CornerRadius = new CornerRadius(size * 0.24), Child = For(a, size * 0.72) };
-            string main = a.colors != null && a.colors.ContainsKey("main") ? a.colors["main"] : null;
-            if (main != null && ImagePath(a) == null)
+            PaintTile(b, a.hat, a.colors, ImagePath(a) != null);
+            return b;
+        }
+
+        // A hat tile's background: the hat's own background color if it has one, else a soft
+        // tint of its main color, else the theme's tint for that kind of hat.
+        public static void PaintTile(Border b, string kind, Dictionary<string, string> colors, bool picture)
+        {
+            string bg, main;
+            if (colors != null && colors.TryGetValue("bg", out bg) && !string.IsNullOrEmpty(bg)) b.Background = B(bg);
+            else if (picture) b.SetResourceReference(Border.BackgroundProperty, "Input");
+            else if (colors != null && colors.TryGetValue("main", out main) && !string.IsNullOrEmpty(main))
             {
                 var tint = B(main).Color;
                 b.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(58, tint.R, tint.G, tint.B));
             }
-            else b.SetResourceReference(Border.BackgroundProperty, ImagePath(a) != null ? "Input" : TintKey(a.hat));
-            return b;
+            else b.SetResourceReference(Border.BackgroundProperty, TintKey(kind));
+        }
+
+        // How far below the brim the drawn hat's box goes, as a share of its size
+        // (so a hat can sit on a peg).
+        public static double BottomGap(string kind)
+        {
+            switch (kind)
+            {
+                case "hardhat": return 5.3 / 24;
+                case "beanie": return 5.5 / 24;
+                case "tophat": return 5.0 / 24;
+                case "cap": return 7.0 / 24;
+                case "bowler": return 6.7 / 24;
+                default: return 3.0 / 24;
+            }
         }
     }
 }

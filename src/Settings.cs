@@ -14,7 +14,7 @@ namespace Hatpick
         public string email { get; set; }    // git user.email
         public string github { get; set; }   // GitHub username Git Credential Manager signs in as
         public string hat { get; set; }      // picture: hardhat, beanie, tophat, cap, bowler
-        public Dictionary<string, string> colors { get; set; }   // custom colors per hat part ("main", "trim", "extra")
+        public Dictionary<string, string> colors { get; set; }   // custom colors per hat part ("main", "trim", "extra") and "bg" for the tile behind it
         public string image { get; set; }    // custom picture file in the "hats" folder, instead of a drawn hat
     }
 
