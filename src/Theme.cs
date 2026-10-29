@@ -1,17 +1,13 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
-using System.Windows;
-using System.Windows.Interop;
-using System.Windows.Markup;
-using System.Windows.Media;
+using Avalonia.Styling;
 
 namespace Hatpick
 {
     // Themes are just palettes. Every color in the UI is a named brush in the app's
     // resources, referenced dynamically, so switching theme swaps the brushes and the
     // whole window repaints. Adding a theme = adding one more palette below.
-    static class Theme
+    static class AppTheme
     {
         public static readonly string[] Names = { "dark", "light" };
         public static string Current = "dark";
@@ -46,9 +42,20 @@ namespace Hatpick
                 {"Shade","#8C1D2233"}, {"TourCard","#1d2233"}, {"TourText","#ffffff"}, {"Scroll","#c4cad9"} } },
         };
 
+        // Fluent's own brushes for the controls Hatpick doesn't restyle, pointed at ours.
+        static readonly Dictionary<string, string> FluentKeys = new Dictionary<string, string>
+        {
+            {"TextControlForeground","Text"}, {"TextControlForegroundPointerOver","Text"}, {"TextControlForegroundFocused","Text"},
+            {"TextControlBackground","Input"}, {"TextControlBackgroundPointerOver","Input"}, {"TextControlBackgroundFocused","Input"},
+            {"TextControlBorderBrush","Border"}, {"TextControlBorderBrushPointerOver","Dashed"}, {"TextControlBorderBrushFocused","Accent"},
+            {"TextControlPlaceholderForeground","Faint"},
+            {"ToolTipBackground","Panel"}, {"ToolTipForeground","Text"}, {"ToolTipBorderBrush","Border"},
+        };
+
         public static void Init(Application app)
         {
-            app.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(Styles.Xaml));
+            app.Styles.Add(new Avalonia.Themes.Fluent.FluentTheme());
+            app.Styles.Add(new HatpickStyles());
             Apply(app, Current);
         }
 
@@ -57,30 +64,16 @@ namespace Hatpick
             Dictionary<string, string> p;
             if (!Palettes.TryGetValue(name, out p)) { name = "dark"; p = Palettes["dark"]; }
             Current = name;
-            foreach (var kv in p)
-            {
-                var b = new SolidColorBrush((Color)ColorConverter.ConvertFromString(kv.Value));
-                b.Freeze();
-                app.Resources[kv.Key] = b;
-            }
-            foreach (Window w in app.Windows) DarkTitleBar(w);
+            foreach (var kv in p) app.Resources[kv.Key] = new SolidColorBrush(Color.Parse(kv.Value));
+            foreach (var kv in FluentKeys) app.Resources[kv.Key] = app.Resources[kv.Value];
+            // Fluent's own parts and the window title bar (Windows, macOS) follow this.
+            app.RequestedThemeVariant = name == "light" ? ThemeVariant.Light : ThemeVariant.Dark;
         }
 
-        public static Brush Brush(string key) { return (Brush)Application.Current.Resources[key]; }
-
-        [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
-
-        // Windows 10 1809+ / 11: match the title bar to the theme. Harmless where unsupported.
-        public static void DarkTitleBar(Window w)
+        public static IBrush Brush(string key)
         {
-            try
-            {
-                var h = new WindowInteropHelper(w).Handle;
-                if (h == IntPtr.Zero) return;
-                int on = Current == "dark" ? 1 : 0;
-                if (DwmSetWindowAttribute(h, 20, ref on, 4) != 0) DwmSetWindowAttribute(h, 19, ref on, 4);
-            }
-            catch { }
+            object b;
+            return Application.Current.Resources.TryGetValue(key, out b) ? b as IBrush : null;
         }
     }
 }

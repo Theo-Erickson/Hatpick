@@ -1,0 +1,69 @@
+#!/bin/sh
+# Builds Hatpick for macOS or Linux into dist/: one file, nothing to install.
+# Needs the .NET 10 SDK (dot.net).
+#   ./build.sh                 this machine (osx-arm64, osx-x64, linux-x64 or linux-arm64)
+#   ./build.sh linux-arm64     another target
+# On macOS the result is dist/Hatpick.app (ad-hoc signed); elsewhere it's dist/<target>/Hatpick.
+set -e
+cd "$(dirname "$0")"
+
+RID="$1"
+if [ -z "$RID" ]; then
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64) RID=osx-arm64 ;;
+    Darwin-*) RID=osx-x64 ;;
+    Linux-aarch64|Linux-arm64) RID=linux-arm64 ;;
+    *) RID=linux-x64 ;;
+  esac
+fi
+
+OUT="dist/$RID"
+rm -rf "$OUT"
+dotnet publish src/Hatpick.csproj -c Release -r "$RID" -o "$OUT" -nologo
+chmod +x "$OUT/Hatpick"
+
+case "$RID" in
+  osx-*)
+    # Wrap it in an app bundle so it opens from Finder and the Dock.
+    VERSION=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' src/Hatpick.csproj)
+    APP="dist/$RID/Hatpick.app"
+    mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+    mv "$OUT/Hatpick" "$APP/Contents/MacOS/Hatpick"
+    if command -v sips >/dev/null && command -v iconutil >/dev/null; then
+      SET="dist/hatpick.iconset"
+      rm -rf "$SET"; mkdir -p "$SET"
+      sips -s format png hatpick.ico --out "$SET/full.png" >/dev/null
+      for s in 16 32 128 256 512; do
+        sips -z $s $s "$SET/full.png" --out "$SET/icon_${s}x${s}.png" >/dev/null
+        sips -z $((s * 2)) $((s * 2)) "$SET/full.png" --out "$SET/icon_${s}x${s}@2x.png" >/dev/null
+      done
+      rm "$SET/full.png"
+      iconutil -c icns "$SET" -o "$APP/Contents/Resources/hatpick.icns"
+      rm -rf "$SET"
+    fi
+    cat > "$APP/Contents/Info.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>Hatpick</string>
+  <key>CFBundleDisplayName</key><string>Hatpick</string>
+  <key>CFBundleIdentifier</key><string>io.github.theo-erickson.hatpick</string>
+  <key>CFBundleVersion</key><string>$VERSION</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>CFBundleExecutable</key><string>Hatpick</string>
+  <key>CFBundleIconFile</key><string>hatpick.icns</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>LSMinimumSystemVersion</key><string>12.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+</dict>
+</plist>
+EOF
+    # Ad-hoc signature: unsigned Apple-silicon apps don't run at all.
+    command -v codesign >/dev/null && codesign --force --deep --sign - "$APP"
+    echo "Built $APP"
+    ;;
+  *)
+    echo "Built $OUT/Hatpick"
+    ;;
+esac

@@ -1,10 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Shapes;
+using Avalonia.Controls.Shapes;
 
 namespace Hatpick
 {
@@ -42,7 +38,7 @@ namespace Hatpick
                 var st = tourSteps[tourIndex];
                 if (page != st.Page) Navigate(st.Page);
                 UpdateLayout();
-                if (Marks.ContainsKey(st.Mark) && Marks[st.Mark].IsVisible) break;
+                if (Marks.ContainsKey(st.Mark) && Marks[st.Mark].IsEffectivelyVisible && TopLevel.GetTopLevel(Marks[st.Mark]) != null) break;
                 tourIndex++;
             }
             if (tourIndex >= tourSteps.Count) { EndTour(); return; }
@@ -51,17 +47,15 @@ namespace Hatpick
             target.BringIntoView();
             UpdateLayout();
 
-            Rect r;
-            try { r = target.TransformToAncestor(root).TransformBounds(new Rect(target.RenderSize)); }
-            catch { tourIndex++; ShowTourStep(); return; }
-            r.Inflate(6, 6);
-            var full = new Rect(0, 0, root.ActualWidth, root.ActualHeight);
-            r.Intersect(full);
+            var at = target.TranslatePoint(new Point(0, 0), root);
+            if (at == null) { tourIndex++; ShowTourStep(); return; }
+            var full = new Rect(0, 0, root.Bounds.Width, root.Bounds.Height);
+            var r = new Rect(at.Value, target.Bounds.Size).Inflate(6).Intersect(full);
 
             overlay.Children.Clear();
             var shade = new Path { Data = new CombinedGeometry(GeometryCombineMode.Exclude, new RectangleGeometry(full), new RectangleGeometry(r, 10, 10)) };
             shade.SetResourceReference(Shape.FillProperty, "Shade");
-            shade.MouseLeftButtonDown += delegate { EndTour(); };
+            shade.PointerPressed += delegate { EndTour(); };
             overlay.Children.Add(shade);
             var ring = new Border { Width = r.Width, Height = r.Height, CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(2), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(r.Left, r.Top, 0, 0), IsHitTestVisible = false };
             ring.SetResourceReference(Border.BorderBrushProperty, "Accent");
@@ -82,7 +76,7 @@ namespace Hatpick
             bar.Children.Add(counter);
             var btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
             var skip = Ui.Btn("Skip", EndTour, "BtnLink");
-            skip.SetResourceReference(Control.ForegroundProperty, "TourText");
+            skip.SetResourceReference(TemplatedControl.ForegroundProperty, "TourText");
             var back = Ui.Btn("Back", delegate { tourIndex = Math.Max(0, tourIndex - 1); ShowTourStep(); }, "Btn");
             back.IsEnabled = tourIndex > 0;
             var next = Ui.Btn(tourIndex == tourSteps.Count - 1 ? "Done" : "Next", delegate { tourIndex++; if (tourIndex >= tourSteps.Count) EndTour(); else ShowTourStep(); }, "BtnPrimary");
@@ -92,7 +86,7 @@ namespace Hatpick
             body.Children.Add(bar);
             var card = new Border { Child = body, Padding = new Thickness(18, 16, 18, 14), CornerRadius = new CornerRadius(12), Width = 340, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
             card.SetResourceReference(Border.BackgroundProperty, "TourCard");
-            card.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 24, ShadowDepth = 6, Opacity = 0.4 };
+            card.BoxShadow = Ui.Shadow(24, 6, 102);
 
             // right of the target if it fits, else below, else above
             double x, y;
@@ -103,10 +97,10 @@ namespace Hatpick
             y = Math.Max(12, Math.Min(y, full.Height - 200));
             card.Margin = new Thickness(x, y, 0, 0);
             overlay.Children.Add(card);
-            overlay.Visibility = Visibility.Visible;
+            overlay.IsVisible = true;
             next.Focus();
-            overlay.PreviewKeyDown -= TourKeys;
-            overlay.PreviewKeyDown += TourKeys;
+            overlay.RemoveHandler(KeyDownEvent, TourKeys);
+            overlay.AddHandler(KeyDownEvent, TourKeys, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         }
 
         void TourKeys(object sender, KeyEventArgs e)
@@ -117,7 +111,7 @@ namespace Hatpick
         void EndTour()
         {
             overlay.Children.Clear();
-            overlay.Visibility = Visibility.Collapsed;
+            overlay.IsVisible = false;
             tourSteps = null;
         }
     }

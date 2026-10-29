@@ -16,3 +16,8 @@ hats/
 
 # README media work files (tools/readme_capture)
 .work/
+
+# .NET build output
+bin/
+obj/
+dist/

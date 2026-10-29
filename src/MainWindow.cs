@@ -4,11 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
-using System.Windows.Interop;
-using System.Windows.Media;
 
 namespace Hatpick
 {
@@ -33,8 +28,8 @@ namespace Hatpick
         StackPanel railTop, railBottom;
         Border host;
         Grid overlay;                                            // used by the tour
-        readonly Dictionary<string, FrameworkElement> railButtons = new Dictionary<string, FrameworkElement>();
-        public readonly Dictionary<string, FrameworkElement> Marks = new Dictionary<string, FrameworkElement>();   // tour targets
+        readonly Dictionary<string, Control> railButtons = new Dictionary<string, Control>();
+        public readonly Dictionary<string, Control> Marks = new Dictionary<string, Control>();   // tour targets
 
         public MainWindow(Settings settings, string startPath)
         {
@@ -42,15 +37,16 @@ namespace Hatpick
             this.startPath = startPath;
             Title = Program.Title;
             Width = 1240; Height = 820; MinWidth = 900; MinHeight = 600;
-            if (Demo.On) { Width = 1280; Height = 800; ResizeMode = Demo.Autoplay != null ? ResizeMode.NoResize : ResizeMode.CanResize; }
+            if (Demo.On) { Width = 1280; Height = 800; CanResize = Demo.Autoplay == null; }
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI");
+            FontFamily = Platform.UiFont;
             FontSize = 14;
-            SetResourceReference(BackgroundProperty, "Bg");
-            SetResourceReference(ForegroundProperty, "Text");
+            this.SetResourceReference(BackgroundProperty, "Bg");
+            this.SetResourceReference(ForegroundProperty, "Text");
             UseLayoutRounding = true;
-            AllowDrop = true;
-            Drop += OnDrop;
+            DragDrop.SetAllowDrop(this, true);
+            AddHandler(DragDrop.DropEvent, OnDrop);
+            Current = this;
 
             root = new Grid();
             root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
@@ -71,19 +67,13 @@ namespace Hatpick
             Grid.SetColumn(host, 1);
             root.Children.Add(host);
 
-            overlay = new Grid { Visibility = Visibility.Collapsed };
+            overlay = new Grid { IsVisible = false };
             Grid.SetColumnSpan(overlay, 2);
             root.Children.Add(overlay);
 
             Content = root;
-            SourceInitialized += delegate
-            {
-                Theme.DarkTitleBar(this);
-                var src = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
-                if (src != null) src.AddHook(WndProc);
-            };
-            Loaded += delegate { OnFirstShown(); };
-            KeyDown += (s, e) => { if (e.Key == System.Windows.Input.Key.F5) Rescan(); };
+            Opened += delegate { Dispatcher.UIThread.Post(OnFirstShown); };
+            KeyDown += (s, e) => { if (e.Key == Key.F5) Rescan(); };
             BuildRail();
             Render();
         }
@@ -102,21 +92,15 @@ namespace Hatpick
             if (startPath != null) OpenPath(startPath);
         }
 
-        IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        public static MainWindow Current { get; private set; }
+
+        // Another copy was started (say, from Explorer's right-click entry) and handed over
+        // its folder: come to the front and open it.
+        public void HandOver(string path)
         {
-            if (msg == Program.WM_COPYDATA)
-            {
-                string path = Program.ReadCopyData(lParam);
-                Dispatcher.BeginInvoke((Action)delegate
-                {
-                    if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
-                    Activate();
-                    OpenPath(path);
-                });
-                handled = true;
-                return (IntPtr)1;
-            }
-            return IntPtr.Zero;
+            if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+            Activate();
+            if (!string.IsNullOrEmpty(path)) OpenPath(path);
         }
 
         // ---------- rail and navigation ----------
@@ -128,7 +112,7 @@ namespace Hatpick
             railButtons.Clear();
             // The badge shows the hat of the repo you're looking at, or Hatpick's own hard hat.
             var current = page == "repos" ? Find(selected) : null;
-            FrameworkElement logo;
+            Control logo;
             string tip = "Hatpick";
             if (current != null)
             {
@@ -139,7 +123,7 @@ namespace Hatpick
             else logo = Hats.Icon("hardhat", 26);
             var logoTile = new Border { Width = 36, Height = 36, CornerRadius = new CornerRadius(18), Margin = new Thickness(0, 0, 0, 14), Child = logo };
             logoTile.Background = new SolidColorBrush(Color.FromRgb(0x2a, 0x33, 0x52));
-            logoTile.ToolTip = tip;
+            logoTile.Tip(tip);
             railTop.Children.Add(logoTile);
             RailButton(railTop, "overview", "Overview", "overview");
             RailButton(railTop, "repos", "Repos", "repos");
@@ -159,9 +143,9 @@ namespace Hatpick
         void RailButton(Panel into, string key, string tip, string icon)
         {
             bool on = page == key;
-            var b = new Button { Style = Ui.Style("RailBtn"), ToolTip = tip, Content = Ui.Icon(icon, 20, on ? "RailAccent" : "RailIcon") };
+            var b = new Button { Theme = Ui.Theme("RailBtn"), [ToolTip.TipProperty] = tip, Content = Ui.Icon(icon, 20, on ? "RailAccent" : "RailIcon") };
             if (on) b.SetResourceReference(BackgroundProperty, "RailActive");
-            System.Windows.Automation.AutomationProperties.SetName(b, tip);
+            Avalonia.Automation.AutomationProperties.SetName(b, tip);
             b.Click += delegate { Navigate(key); };
             into.Children.Add(b);
             railButtons[key] = b;
@@ -170,8 +154,8 @@ namespace Hatpick
 
         Button RailIconButton(string icon, string tip, Action onClick)
         {
-            var b = new Button { Style = Ui.Style("RailBtn"), ToolTip = tip, Content = Ui.Icon(icon, 20, "RailIcon") };
-            System.Windows.Automation.AutomationProperties.SetName(b, tip);
+            var b = new Button { Theme = Ui.Theme("RailBtn"), [ToolTip.TipProperty] = tip, Content = Ui.Icon(icon, 20, "RailIcon") };
+            Avalonia.Automation.AutomationProperties.SetName(b, tip);
             if (onClick != null) b.Click += delegate { onClick(); };
             return b;
         }
@@ -183,9 +167,9 @@ namespace Hatpick
             if (repo != null) selected = repo;
             if (hat != null) selectedHat = hat;
             Render();
-            FrameworkElement mark;
+            Control mark;
             if (scrollTo != null && Marks.TryGetValue(scrollTo, out mark))
-                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, (Action)delegate { mark.BringIntoView(new Rect(0, 0, mark.ActualWidth, Math.Min(mark.ActualHeight, 420))); });
+                Dispatcher.UIThread.Post(delegate { mark.BringIntoView(new Rect(0, 0, mark.Bounds.Width, Math.Min(mark.Bounds.Height, 420))); }, DispatcherPriority.Loaded);
         }
 
         public void Navigate(string to, string repo = null)
@@ -200,7 +184,7 @@ namespace Hatpick
         {
             BuildRail();   // the badge follows the selected repo
             Marks.Keys.Where(k => !k.StartsWith("rail-") && k != "theme" && k != "help").ToList().ForEach(k => Marks.Remove(k));
-            FrameworkElement view;
+            Control view;
             switch (page)
             {
                 case "repos": view = RepoPage(); break;
@@ -213,21 +197,21 @@ namespace Hatpick
         }
 
         // A page: scrolls vertically, comfortable margins, max width so lines don't get too long.
-        static ScrollViewer PageScroll(UIElement content)
+        static ScrollViewer PageScroll(Control content)
         {
             var inner = new Border { Padding = new Thickness(32, 22, 32, 32), Child = content, MaxWidth = 1180, HorizontalAlignment = HorizontalAlignment.Stretch };
             return new ScrollViewer { Content = inner, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         }
 
         // Page title row: title on the left, small buttons on the right.
-        static DockPanel Header(string title, string helpTopic, params UIElement[] right)
+        static DockPanel Header(string title, string helpTopic, params Control[] right)
         {
             var d = new DockPanel { LastChildFill = false, Margin = new Thickness(0, 0, 0, 22) };
             var t = Ui.TitleWithHelp(Ui.Text(title, 24, "Text", FontWeights.Bold), helpTopic);
             DockPanel.SetDock(t, Dock.Left);
             d.Children.Add(t);
             var r = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            foreach (var el in right) { var fe = el as FrameworkElement; if (fe != null) fe.Margin = new Thickness(6, 0, 0, 0); r.Children.Add(el); }
+            foreach (var el in right) { var fe = el as Control; if (fe != null) fe.Margin = new Thickness(6, 0, 0, 0); r.Children.Add(el); }
             DockPanel.SetDock(r, Dock.Right);
             d.Children.Add(r);
             return d;
@@ -366,7 +350,8 @@ namespace Hatpick
 
         void OpenFolder(RepoReport r)
         {
-            if (Directory.Exists(r.Path)) Process.Start("explorer.exe", "\"" + r.Path + "\"");
+            try { if (Directory.Exists(r.Path)) Platform.OpenFolder(r.Path); }
+            catch (Exception e) { Dialogs.Info(this, "Couldn't open the folder", e.Message); }
         }
 
         void OpenInDesktop(RepoReport r)
@@ -377,14 +362,14 @@ namespace Hatpick
                 Dialogs.Info(this, "Not in the demo", "The demo's repos are made up, so they aren't opened in GitHub Desktop.");
                 return;
             }
-            try { Process.Start("x-github-client://openLocalRepo/" + Uri.EscapeDataString(r.Path)); }
+            try { Platform.OpenUrl("x-github-client://openLocalRepo/" + Uri.EscapeDataString(r.Path)); }
             catch (Exception e) { Dialogs.Info(this, "Couldn't open GitHub Desktop", e.Message); }
         }
 
-        void OpenGitBash(RepoReport r)
+        void OpenTerminal(RepoReport r)
         {
-            try { var psi = new ProcessStartInfo(Git.GitBash, "--cd=\"" + r.Path + "\"") { UseShellExecute = false }; Demo.Isolate(psi); Process.Start(psi); }
-            catch (Exception e) { Dialogs.Info(this, "Couldn't open Git Bash", e.Message); }
+            try { var psi = Platform.Terminal(r.Path); Demo.Isolate(psi); Process.Start(psi); }
+            catch (Exception e) { Dialogs.Info(this, "Couldn't open " + Platform.TerminalName, e.Message); }
         }
 
         void SyncFolders()
@@ -459,12 +444,12 @@ namespace Hatpick
 
         void OnDrop(object sender, DragEventArgs e)
         {
-            var paths = e.Data.GetData(DataFormats.FileDrop) as string[];
-            if (paths == null) return;
-            foreach (var p in paths)
+            var files = e.DataTransfer.TryGetFiles();
+            if (files == null) return;
+            foreach (var p in files.Select(f => Avalonia.Platform.Storage.StorageProviderExtensions.TryGetLocalPath(f)).Where(p => p != null))
             {
                 string dir = Directory.Exists(p) ? p : Path.GetDirectoryName(p);
-                Dispatcher.BeginInvoke((Action)delegate { OpenPath(dir); });
+                Dispatcher.UIThread.Post(delegate { OpenPath(dir); });
             }
         }
 
@@ -472,20 +457,20 @@ namespace Hatpick
         {
             settings.theme = settings.theme == "dark" ? "light" : "dark";
             settings.Save();
-            Theme.Apply(Application.Current, settings.theme);
+            AppTheme.Apply(Application.Current, settings.theme);
             BuildRail();
         }
 
         void SignInAccount()
         {
             if (!Dialogs.Ask(this, "Sign in another account",
-                "This opens Git Credential Manager's own sign-in: a small console window and your browser, where you sign in to GitHub.\n\n" +
-                "Hatpick doesn't see anything you enter. When the console closes, Hatpick refreshes the list of signed-in accounts.", "Open sign-in")) return;
+                "This opens Git Credential Manager's own sign-in: " + Platform.SignInWindow + ", where you sign in to GitHub.\n\n" +
+                "Hatpick doesn't see anything you enter. " + Platform.SignInDone + ", Hatpick refreshes the list of signed-in accounts.", "Open sign-in")) return;
             try
             {
                 var p = Git.StartGcmLogin();
                 p.EnableRaisingEvents = true;
-                p.Exited += delegate { Dispatcher.BeginInvoke((Action)Rescan); };
+                p.Exited += delegate { Dispatcher.UIThread.Post(Rescan); };
             }
             catch (Exception e) { Dialogs.Info(this, "Couldn't start Git Credential Manager", e.Message); }
         }
@@ -547,14 +532,14 @@ namespace Hatpick
 
         // ---------- help menu ----------
 
-        void ShowHelpMenu(UIElement anchor)
+        void ShowHelpMenu(Control anchor)
         {
-            var popup = new Popup { PlacementTarget = anchor, Placement = PlacementMode.Right, StaysOpen = false, AllowsTransparency = true, HorizontalOffset = 8 };
+            Action close = null;
             var list = new StackPanel();
             Action<string, Action> item = (text, act) =>
             {
-                var b = new Button { Style = Ui.Style("Row"), Content = Ui.Text(text, 13), MinHeight = 36, Padding = new Thickness(12, 0, 12, 0) };
-                b.Click += delegate { popup.IsOpen = false; act(); };
+                var b = new Button { Theme = Ui.Theme("Row"), Content = Ui.Text(text, 13), MinHeight = 36, Padding = new Thickness(12, 0, 12, 0) };
+                b.Click += delegate { close(); Dispatcher.UIThread.Post(act); };
                 list.Children.Add(b);
             };
             item("Take the tour", StartTour);
@@ -567,10 +552,9 @@ namespace Hatpick
                 "Picks which Git account each repo commits and pushes as.\n\nIt never signs in or sees a password or token; Git Credential Manager keeps your sign-ins.\n\nUsing git at:\n" + Git.Exe));
             var card = Ui.Panel(list, 6);
             card.MinWidth = 240;
-            card.Margin = new Thickness(0, 0, 12, 12);
-            card.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 18, ShadowDepth = 4, Opacity = 0.35 };
-            popup.Child = card;
-            popup.IsOpen = true;
+            card.Margin = new Thickness(8, 0, 12, 12);
+            card.BoxShadow = Ui.Shadow();
+            close = Ui.ShowPopup(anchor, card, PlacementMode.RightEdgeAlignedBottom);
         }
 
         void RunSetup()
@@ -582,7 +566,7 @@ namespace Hatpick
                 settings.Save();
                 SyncFolders();
                 Rescan();
-                if (tour) Dispatcher.BeginInvoke((Action)StartTour, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                if (tour) Dispatcher.UIThread.Post(StartTour, DispatcherPriority.ApplicationIdle);
             }
             else
             {

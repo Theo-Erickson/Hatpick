@@ -4,8 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Windows;
-using System.Windows.Threading;
 
 namespace Hatpick
 {
@@ -190,11 +188,8 @@ namespace Hatpick
         {
             var all = new List<string> { "-C", repo };
             all.AddRange(args);
-            var psi = new ProcessStartInfo(Hatpick.Git.Exe, string.Join(" ", all.Select(Hatpick.Git.Quote)))
-            {
-                UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true,
-            };
-            Isolate(psi);
+            var psi = Hatpick.Git.Start(all);   // already isolated
+            psi.RedirectStandardError = true; psi.RedirectStandardOutput = true;
             if (env != null) foreach (var kv in env) psi.EnvironmentVariables[kv.Key] = kv.Value;
             using (var p = Process.Start(psi))
             {
@@ -283,7 +278,7 @@ namespace Hatpick
             double length;
             var steps = Script(Autoplay, out length);
             System.Threading.EventWaitHandle go = null;
-            try { System.Threading.EventWaitHandle.TryOpenExisting(GoEvent, out go); } catch { }
+            if (OperatingSystem.IsWindows()) try { System.Threading.EventWaitHandle.TryOpenExisting(GoEvent, out go); } catch { }
 
             w.DemoShow(steps[0].Page, steps[0].Repo, steps[0].Hat, steps[0].ScrollTo);
             var clock = new Stopwatch();

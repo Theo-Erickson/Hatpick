@@ -1,10 +1,10 @@
-# Builds Hatpick.exe on GitHub's Windows machines with build.cmd (the .NET Framework C#
-# compiler that ships with Windows, same as on your PC).
+# Builds Hatpick for Windows, macOS and Linux on GitHub's machines (build.cmd / build.sh,
+# the same scripts you run locally). Each build is one self-contained file: nothing to install.
 #
-# - Every push to main and every pull request: build, and keep Hatpick.exe as a download
-#   on the run's page for 14 days (Actions > the run > Artifacts). Catches a broken build.
-# - Pushing a version tag (v3.1-hat-rack, v3.2, ...): build, then publish a GitHub Release
-#   for that tag with Hatpick.exe attached. Re-pushing a tag replaces the exe.
+# - Every push to main and every pull request: build all of them, and keep each as a
+#   download on the run's page for 14 days (Actions > the run > Artifacts). Catches a broken build.
+# - Pushing a version tag (v3.2, ...): build, then publish a GitHub Release for that tag with
+#   every build attached. Re-pushing a tag replaces the files.
 # - Actions > Build > Run workflow: build by hand, without a release.
 name: Build
 
@@ -20,31 +20,70 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, rid: win-x64,     asset: Hatpick.exe }
+          - { os: macos-latest,   rid: osx-arm64,   asset: Hatpick-macos-arm64.zip }
+          - { os: macos-latest,   rid: osx-x64,     asset: Hatpick-macos-x64.zip }
+          - { os: ubuntu-latest,  rid: linux-x64,   asset: Hatpick-linux-x64.tar.gz }
+          - { os: ubuntu-latest,  rid: linux-arm64, asset: Hatpick-linux-arm64.tar.gz }
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
 
-      - name: Build Hatpick.exe
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
         shell: cmd
-        run: call build.cmd
+        run: call build.cmd ${{ matrix.rid }}
+
+      - name: Build (macOS, Linux)
+        if: runner.os != 'Windows'
+        run: ./build.sh ${{ matrix.rid }}
+
+      - name: Package
+        shell: bash
+        run: |
+          case "${{ matrix.rid }}" in
+            osx-*)   ditto -c -k --keepParent "dist/${{ matrix.rid }}/Hatpick.app" "${{ matrix.asset }}" ;;
+            linux-*) tar -czf "${{ matrix.asset }}" -C "dist/${{ matrix.rid }}" Hatpick ;;
+          esac
 
       - name: Keep the build
         uses: actions/upload-artifact@v7
         with:
-          name: Hatpick
-          path: Hatpick.exe
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
           retention-days: 14
 
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          path: assets
+          merge-multiple: true
+
       - name: Publish the release
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" Hatpick.exe --clobber
+          if gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" assets/* -R "$REPO" --clobber
           else
-            gh release create "$TAG" Hatpick.exe --title "Hatpick $TAG" --generate-notes \
-              --notes "Download **Hatpick.exe** below and run it - nothing to install. Needs Git for Windows (git-scm.com)."
+            gh release create "$TAG" assets/* -R "$REPO" --title "Hatpick $TAG" --generate-notes \
+              --notes "Download the file for your system below and run it - nothing to install. Needs git (and Git Credential Manager for push accounts).
+
+          - **Windows:** Hatpick.exe
+          - **macOS:** Hatpick-macos-arm64.zip (Apple silicon) or Hatpick-macos-x64.zip (Intel). Unzip, then right-click Hatpick > Open the first time.
+          - **Linux:** Hatpick-linux-x64.tar.gz or Hatpick-linux-arm64.tar.gz. Extract and run ./Hatpick."
           fi
