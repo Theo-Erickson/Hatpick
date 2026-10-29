@@ -4,8 +4,8 @@
 
 <p align="center">
   <a href="https://github.com/Theo-Erickson/Hatpick/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/Theo-Erickson/Hatpick?label=download&color=f08a4b"></a>
-  <img alt="Windows" src="https://img.shields.io/badge/platform-Windows-2a3352">
-  <img alt=".NET Framework 4.x" src="https://img.shields.io/badge/.NET%20Framework-4.x%20(WPF)-5b3a8c">
+  <img alt="Windows, macOS, Linux" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-2a3352">
+  <img alt=".NET 10 and Avalonia" src="https://img.shields.io/badge/.NET%2010-Avalonia-5b3a8c">
   <img alt="No sign-in" src="https://img.shields.io/badge/passwords%20seen-0-4cc38a">
 </p>
 
@@ -29,8 +29,15 @@ The name is a nod to a hat trick.
 
 > [!NOTE]
 > Hatpick never asks for a password or token and never sees one. Your GitHub sign-ins stay
-> in **Git Credential Manager** (GCM), which ships with Git for Windows. Hatpick only writes
+> in **Git Credential Manager** (GCM), which ships with Git for Windows and installs separately
+> on macOS and Linux. Hatpick only writes
 > plain git settings that say *which* sign-in to use.
+
+## What's new in 3.2
+
+| | |
+|---|---|
+| **macOS and Linux** | Hatpick now runs on Windows, macOS and Linux. Each download is still one file with nothing to install. |
 
 ## What's new in 3.1
 
@@ -63,7 +70,7 @@ A slim rail on the left switches pages; theme and help sit at the bottom.
 - **Hats**: your hat rack. You can add, edit and remove hats (label, commit name and email,
   GitHub username, hat, colors or picture) and see which accounts are signed in to GCM.
 - **Folders**: watched folders and their default hats, single repos and the optional
-  Explorer right-click entry.
+  Explorer right-click entry (Windows).
 - **Reset**: undo everything Hatpick changed.
 
 <table>
@@ -79,27 +86,38 @@ take the one-minute tour. Dark and light themes are built in.
 
 ## Getting started
 
-1. Install [Git for Windows](https://git-scm.com/download/win). It includes Git Credential
-   Manager.
-2. Download `Hatpick.exe` from the [latest release](https://github.com/Theo-Erickson/Hatpick/releases/latest),
-   or build it yourself (see [Building](#building)), and run it. Nothing else to
-   install.
+1. Install git and Git Credential Manager:
+   - **Windows:** [Git for Windows](https://git-scm.com/download/win) includes both.
+   - **macOS:** `brew install git` and `brew install --cask git-credential-manager` (or the
+     installers from [git-scm.com](https://git-scm.com/download/mac) and
+     [GCM](https://github.com/git-ecosystem/git-credential-manager/releases)).
+   - **Linux:** git from your package manager, and GCM from its
+     [releases page](https://github.com/git-ecosystem/git-credential-manager/releases).
+2. Download Hatpick for your system from the [latest release](https://github.com/Theo-Erickson/Hatpick/releases/latest),
+   or build it yourself (see [Building](#building)), and run it. Nothing else to install.
+
+   | | Download | Run |
+   |---|---|---|
+   | Windows | `Hatpick.exe` | Double-click it. |
+   | macOS | `Hatpick-macos-arm64.zip` (Apple silicon) or `-x64` (Intel) | Unzip, then right-click *Hatpick* > *Open* the first time (it isn't notarized). |
+   | Linux | `Hatpick-linux-x64.tar.gz` or `-arm64` | Extract and run `./Hatpick`. |
 3. Follow the setup: sign in each GitHub account once through GCM, make a hat for each, and
    point Hatpick at the folders that hold your repos.
 
 > [!TIP]
-> Want to look around first? `Hatpick.exe --demo` opens with three made-up hats and a handful
-> of sample repos in `%TEMP%\Hatpick demo`. Your real config, sign-ins and registry are left
-> alone, and the demo is rebuilt fresh each time.
+> Want to look around first? `Hatpick --demo` (`Hatpick.exe --demo` on Windows) opens with
+> three made-up hats and a handful of sample repos in a `Hatpick demo` folder in your temp
+> folder. Your real config, sign-ins and registry are left alone, and the demo is rebuilt fresh
+> each time.
 
 ## How it decides
 
-**Watched folders** hold your repos, like `Documents\GitHub`. Every repo inside is listed
+**Watched folders** hold your repos, like `Documents/GitHub`. Every repo inside is listed
 (up to 4 levels deep, skipping build folders such as `Intermediate`, `Saved` and
 `node_modules`). A folder's **default hat** applies to every repo in it, including repos you
 clone or create there later. **Single repos** live somewhere else, and you pick their hat
 directly. **Analyzing** any folder (drop it on the window, use *Folders > Analyze a folder*,
-the command line or the Explorer entry) shows it without adding it.
+the command line, or the Explorer entry on Windows) shows it without adding it.
 
 A repo's own setting beats its folder default, which beats your global settings:
 
@@ -160,7 +178,7 @@ GCM sign-ins are never touched.
 
 GitHub Desktop uses each repo's commit name and email. When it **pushes** to github.com it
 uses the account you're signed into in Desktop, not GCM. For a repo that belongs to your
-other account, push from Git Bash (`git push` goes through GCM), or add Desktop's account as
+other account, push from a terminal (`git push` goes through GCM), or add Desktop's account as
 a collaborator.
 
 </details>
@@ -168,28 +186,45 @@ a collaborator.
 <details>
 <summary><b>If something goes wrong</b></summary>
 
-Unexpected errors are written to `hatpick-error.log` next to `Hatpick.exe`, and the message
-says so. Custom hat pictures are kept in a `hats` folder next to `Hatpick.exe`.
+Unexpected errors are written to `hatpick-error.log`, and the message says where. Hatpick
+keeps that log, its settings (`hatpick.json`) and custom hat pictures (a `hats` folder) in:
+
+| | |
+|---|---|
+| Windows | next to `Hatpick.exe` |
+| macOS | `~/Library/Application Support/Hatpick` |
+| Linux | `~/.config/hatpick` (or `$XDG_CONFIG_HOME/hatpick`) |
 
 </details>
 
 ## Building
 
-`build.cmd` compiles every `.cs` file in `src` into `Hatpick.exe` with the C# compiler that
-ships with Windows (.NET Framework 4.x, WPF), so there's nothing to install. Close Hatpick
-before rebuilding, and stick to C# 5 syntax.
+Hatpick is C# on .NET 10 with [Avalonia](https://avaloniaui.net) for the window, so one
+codebase runs everywhere. Install the [.NET 10 SDK](https://dot.net), then:
+
+| On | Run | You get |
+|---|---|---|
+| Windows | `build.cmd` | `Hatpick.exe` in the repo folder (close Hatpick first) |
+| macOS | `./build.sh` | `dist/osx-arm64/Hatpick.app` (or `osx-x64`) |
+| Linux | `./build.sh` | `dist/linux-x64/Hatpick` (or `linux-arm64`) |
+
+Each is a single self-contained file of about 50 MB. Pass a target to build for another
+machine, for example `./build.sh linux-arm64`. GitHub Actions builds all of them on every push,
+and attaches them to a release when you push a `v*` tag.
 
 | Where | What |
 |---|---|
-| `src/Styles.cs` | Control looks, as XAML loaded at startup |
+| `src/Styles.axaml` | Control looks (Avalonia control themes) |
+| `src/Platform.cs` | Everything that differs between Windows, macOS and Linux |
 | `src/Theme.cs` | Color palettes. Adding a theme is one more palette. |
 | `src/Ui.cs` | Shared building blocks, including the drawn hats and their colorable parts |
 | `src/Demo.cs` | `--demo` mode and its sample data |
 | `tools/make-icon.py` | Draws `hatpick.ico` (Python with Pillow 10.1+) |
-| `tools/readme_capture/` | Records demo mode as PNG frames (the GIFs in this README were made from them) |
+| `tools/readme_capture/` | Records demo mode as PNG frames on Windows (the GIFs in this README were made from them) |
 
 The icon shows the hat trick (hard hat, top hat, beanie) at 64px and up. At 48px and below,
-which covers the Start menu and taskbar, it shows just the hard hat and the beanie.
+which covers the Start menu and taskbar, it shows just the hard hat and the beanie. The macOS
+build turns `hatpick.ico` into the app's icon.
 
 ```powershell
 python tools\make-icon.py hatpick.ico hatpick.png
@@ -205,6 +240,7 @@ python tools\make-icon.py hatpick.ico hatpick.png
 | `v2.0-analyzer` | Repo analyzer, reset, first-run setup, tour and help |
 | `v3.0-wpf` | New WPF interface with themes, hats everywhere, and commit author fixing |
 | `v3.1-hat-rack` | Hat rack, hat colors and pictures, repo badge, demo mode |
+| `v3.2` | Runs on Windows, macOS and Linux (Avalonia) |
 
 To get any version as its own folder:
 

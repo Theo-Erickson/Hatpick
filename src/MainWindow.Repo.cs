@@ -2,10 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
-using System.Windows.Media;
 
 namespace Hatpick
 {
@@ -21,7 +17,7 @@ namespace Hatpick
         bool rewriteStrip = true, rewriteCommitter = true;
         string listSearch = "";
 
-        FrameworkElement RepoPage()
+        Control RepoPage()
         {
             var grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(270) });
@@ -31,8 +27,8 @@ namespace Hatpick
             side.SetResourceReference(Border.BackgroundProperty, "Side");
             side.SetResourceReference(Border.BorderBrushProperty, "Border");
             var sideDock = new DockPanel { Margin = new Thickness(10, 14, 10, 10) };
-            var box = new TextBox { Height = 32, Text = listSearch, Margin = new Thickness(0, 0, 0, 8), ToolTip = "Search repos" };
-            System.Windows.Automation.AutomationProperties.SetName(box, "Search repos");
+            var box = new TextBox { Height = 32, Text = listSearch, Margin = new Thickness(0, 0, 0, 8), [ToolTip.TipProperty] = "Search repos" };
+            Avalonia.Automation.AutomationProperties.SetName(box, "Search repos");
             DockPanel.SetDock(box, Dock.Top);
             sideDock.Children.Add(box);
             var listHost = new StackPanel();
@@ -44,7 +40,7 @@ namespace Hatpick
             Marks["repolist"] = side;
 
             var r = Find(selected);
-            FrameworkElement detail;
+            Control detail;
             if (!scannedOnce) detail = PageScroll(Ui.Text("Looking for repos...", 14, "Muted"));
             else if (r == null) detail = PageScroll(Ui.Stack(8, Ui.Text("No repo selected", 22, "Text", FontWeights.Bold),
                 Ui.Text("Pick a repo on the left, or drop any folder onto this window to analyze it.", 14, "Muted")));
@@ -83,7 +79,7 @@ namespace Hatpick
                     var name = Ui.Text(x.DisplayName, 13, "Text", on ? FontWeights.SemiBold : FontWeights.Normal);
                     name.TextTrimming = TextTrimming.CharacterEllipsis; name.TextWrapping = TextWrapping.NoWrap;
                     row.Children.Add(name);
-                    var b = new Button { Style = Ui.Style("Row"), Content = row, ToolTip = x.Path };
+                    var b = new Button { Theme = Ui.Theme("Row"), Content = row, [ToolTip.TipProperty] = x.Path };
                     if (on) b.SetResourceReference(BackgroundProperty, "SelRow");
                     b.Click += delegate { Navigate("repos", rep.Path); };
                     into.Children.Add(b);
@@ -100,16 +96,16 @@ namespace Hatpick
             group("Analyzed", reports.Where(x => x.Source == RepoSource.Opened));
         }
 
-        FrameworkElement RepoDetail(RepoReport r)
+        Control RepoDetail(RepoReport r)
         {
             var sp = new StackPanel();
             sp.Children.Add(Ui.MonoText(r.Path, 12, "Muted"));
-            var actions = new List<UIElement>
+            var actions = new List<Control>
             {
-                Ui.IconBtn(Ui.Icon("folder", 14, "Text"), "Open folder", delegate { OpenFolder(r); }),
-                Ui.IconBtn(Ui.Icon("external", 14, "Text"), "GitHub Desktop", delegate { OpenInDesktop(r); })
+                Ui.IconBtn(Ui.Icon("folder", 14, "Text"), "Open folder", delegate { OpenFolder(r); })
             };
-            if (Git.GitBash != null) actions.Add(Ui.IconBtn(Ui.Icon("terminal", 14, "Text"), "Git Bash", delegate { OpenGitBash(r); }));
+            if (Platform.HasGitHubDesktop) actions.Add(Ui.IconBtn(Ui.Icon("external", 14, "Text"), "GitHub Desktop", delegate { OpenInDesktop(r); }));
+            if (Platform.HasTerminal) actions.Add(Ui.IconBtn(Ui.Icon("terminal", 14, "Text"), Platform.TerminalName, delegate { OpenTerminal(r); }));
             if (r.Source == RepoSource.Opened) actions.Add(Ui.Btn("Keep in list", delegate { AddSingle(r.Path); }, "BtnPrimary"));
             if (r.Source == RepoSource.Single) actions.Add(Ui.Btn("Remove from list", delegate { RemoveSingle(r); }));
             var head = Header(r.DisplayName, null, actions.ToArray());
@@ -185,7 +181,7 @@ namespace Hatpick
         {
             var sp = new StackPanel();
             sp.Children.Add(Ui.TitleWithHelp(Ui.Text(caption, 12, "Muted"), help));
-            FrameworkElement tile;
+            Control tile;
             if (kind == "key" || kind == "cloud")
             {
                 var t = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(10), Child = Ui.Icon(kind, 22, "Sub") };
@@ -206,7 +202,7 @@ namespace Hatpick
             sp.Children.Add(row);
             var s = Ui.MonoText(sub, 12, "Sub");
             sp.Children.Add(s);
-            var b = new Button { Style = Ui.Style("Card"), Content = sp, Margin = new Thickness(0, 0, 12, 12), Cursor = System.Windows.Input.Cursors.Arrow, Focusable = false };
+            var b = new Button { Theme = Ui.Theme("Card"), Content = sp, Margin = new Thickness(0, 0, 12, 12), Cursor = new Cursor(StandardCursorType.Arrow), Focusable = false };
             return b;
         }
 
@@ -215,10 +211,10 @@ namespace Hatpick
             var g = new Grid();
             for (int i = 0; i < 4; i++) g.ColumnDefinitions.Add(new ColumnDefinition { Width = i == 0 ? new GridLength(1.1, GridUnitType.Star) : new GridLength(1.3, GridUnitType.Star) });
             int row = 0;
-            Action<UIElement, int> put = (el, col) =>
+            Action<Control, int> put = (el, col) =>
             {
                 Grid.SetRow(el, row); Grid.SetColumn(el, col);
-                var fe = el as FrameworkElement; if (fe != null) fe.Margin = new Thickness(14, 9, 8, 9);
+                var fe = el as Control; if (fe != null) fe.Margin = new Thickness(14, 9, 8, 9);
                 g.Children.Add(el);
             };
             g.RowDefinitions.Add(new RowDefinition());
@@ -250,7 +246,7 @@ namespace Hatpick
             return b;
         }
 
-        static FrameworkElement LayerValue(string value, bool wins)
+        static Control LayerValue(string value, bool wins)
         {
             if (value.Length == 0) { var dash = Ui.Text("-", 12.5, "Faint"); dash.FontFamily = Ui.Mono; return dash; }
             var t = Ui.MonoText(value, 12.5, wins ? "WinText" : "Muted");
@@ -310,7 +306,7 @@ namespace Hatpick
 
         // ---------- commits ----------
 
-        FrameworkElement CommitsSection(RepoReport r)
+        Control CommitsSection(RepoReport r)
         {
             string key = Settings.Norm(r.Path);
             if (commitSelRepo != key) { commitSel = new HashSet<string>(); commitSelRepo = key; }
@@ -339,7 +335,7 @@ namespace Hatpick
             if (backups.Count > 0)
             {
                 var undo = Ui.Btn("Undo last change (" + backups[0].When + ")", delegate { UndoRewrite(r, st, backups[0]); });
-                undo.ToolTip = "Puts the branch back as it was before Hatpick's last rewrite or undo of commits";
+                undo.Tip("Puts the branch back as it was before Hatpick's last rewrite or undo of commits");
                 undo.Margin = new Thickness(0, 0, 6, 0);
                 right.Children.Add(undo);
             }
@@ -381,7 +377,7 @@ namespace Hatpick
             var author = Ui.Picker(authorChoices, rewriteAuthor, v => rewriteAuthor = v, 240);
             var strip = new CheckBox { Content = "Remove co-authors", IsChecked = rewriteStrip, VerticalAlignment = VerticalAlignment.Center };
             strip.Click += delegate { rewriteStrip = strip.IsChecked == true; };
-            var committer = new CheckBox { Content = "Also make you the committer", IsChecked = rewriteCommitter, VerticalAlignment = VerticalAlignment.Center, ToolTip = "The committer is who last wrote the commit. Usually the same as the author for your own commits." };
+            var committer = new CheckBox { Content = "Also make you the committer", IsChecked = rewriteCommitter, VerticalAlignment = VerticalAlignment.Center, [ToolTip.TipProperty] = "The committer is who last wrote the commit. Usually the same as the author for your own commits." };
             committer.Click += delegate { rewriteCommitter = committer.IsChecked == true; };
             var go = Ui.Btn(commitSel.Count == 0 ? "Select commits above" : "Rewrite " + commitSel.Count + " commit(s)...", delegate { ConfirmRewrite(r, st); }, "BtnPrimary");
             go.IsEnabled = commitSel.Count > 0;
@@ -417,11 +413,11 @@ namespace Hatpick
             return sp;
         }
 
-        FrameworkElement CommitRow(CommitInfo c)
+        Control CommitRow(CommitInfo c)
         {
             var row = new DockPanel { Margin = new Thickness(6, 2, 6, 2) };
             var cb = new CheckBox { IsChecked = commitSel.Contains(c.Sha), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 10, 0), IsEnabled = !c.IsMerge };
-            System.Windows.Automation.AutomationProperties.SetName(cb, "Select " + c.Subject);
+            Avalonia.Automation.AutomationProperties.SetName(cb, "Select " + c.Subject);
             cb.Click += delegate
             {
                 if (cb.IsChecked == true) commitSel.Add(c.Sha); else commitSel.Remove(c.Sha);
@@ -433,7 +429,7 @@ namespace Hatpick
             var acct = settings.AccountByEmail(c.AuthorEmail);
             var hatIcon = acct != null ? Hats.For(acct, 22) : Ui.Icon("user", 20, "Muted");
             hatIcon.Margin = new Thickness(0, 0, 10, 0);
-            hatIcon.ToolTip = c.AuthorName + " <" + c.AuthorEmail + ">";
+            hatIcon.Tip(c.AuthorName + " <" + c.AuthorEmail + ">");
             DockPanel.SetDock(hatIcon, Dock.Left);
             row.Children.Add(hatIcon);
 
@@ -463,7 +459,7 @@ namespace Hatpick
             t.TextWrapping = TextWrapping.NoWrap;
             var b = new Border { Child = t, Padding = new Thickness(8, 2, 8, 3), CornerRadius = new CornerRadius(10), Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
             b.SetResourceReference(Border.BackgroundProperty, bg);
-            if (tip != null) b.ToolTip = tip;
+            if (tip != null) b.Tip(tip);
             return b;
         }
 
@@ -494,7 +490,7 @@ namespace Hatpick
                 body.Children.Add(ack);
             }
             w.Layout(body, Ui.Btn("Cancel", w.Close), ok);
-            w.ShowDialog();
+            w.ShowModal();
             if (!go) return;
 
             bool anyPushed = fresh.Commits.Where(c => sel.Contains(c.Sha)).Any(c => c.Pushed) || plan.Warnings.Any(i => i.Text.Contains("already pushed"));
@@ -541,7 +537,7 @@ namespace Hatpick
                 body.Children.Add(ack);
             }
             w.Layout(body, Ui.Btn("Cancel", w.Close), ok);
-            w.ShowDialog();
+            w.ShowModal();
             if (!go) return;
 
             bool anyPushed = range.Any(c => c.Pushed);
@@ -550,7 +546,7 @@ namespace Hatpick
                 History.Uncommit(r.Path, fresh, sel);
                 commitSel.Clear();
                 commitCache.Remove(Settings.Norm(r.Path));
-                if (range.Count == 1) try { Clipboard.SetText(range[0].Body.Trim().Length > 0 ? range[0].Body.Trim() : range[0].Subject); } catch { }
+                if (range.Count == 1) try { Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(Clipboard, range[0].Body.Trim().Length > 0 ? range[0].Body.Trim() : range[0].Subject); } catch { }
                 Dialogs.Info(this, "Done", "Undid " + range.Count + " commit(s). Their changes are in your folder as uncommitted changes.\n\n" +
                     "Next: in GitHub Desktop, uncheck anything you want to leave out and commit again." +
                     (range.Count == 1 ? " The old commit message is on your clipboard." : "") +

@@ -258,13 +258,10 @@ namespace Hatpick
         {
             var all = new List<string> { "-C", repo };
             all.AddRange(args);
-            var psi = new ProcessStartInfo(Git.Exe, string.Join(" ", all.Select(Git.Quote)))
-            {
-                UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
-                RedirectStandardInput = input != null, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8
-            };
+            var psi = Git.Start(all);
+            psi.RedirectStandardOutput = true; psi.RedirectStandardError = true; psi.RedirectStandardInput = input != null;
+            psi.StandardOutputEncoding = Encoding.UTF8; psi.StandardErrorEncoding = Encoding.UTF8;
             psi.EnvironmentVariables["GIT_TERMINAL_PROMPT"] = "0";
-            Demo.Isolate(psi);
             if (env != null) foreach (var kv in env) psi.EnvironmentVariables[kv.Key] = kv.Value;
             using (var p = Process.Start(psi))
             {

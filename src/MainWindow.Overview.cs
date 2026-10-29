@@ -1,9 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 
 namespace Hatpick
 {
@@ -11,11 +8,11 @@ namespace Hatpick
     // hat it commits with and the hat it pushes with.
     partial class MainWindow
     {
-        FrameworkElement OverviewPage()
+        Control OverviewPage()
         {
             var sp = new StackPanel();
-            var searchBox = new TextBox { Width = 240, Height = 32, Text = search, ToolTip = "Search repos" };
-            System.Windows.Automation.AutomationProperties.SetName(searchBox, "Search repos");
+            var searchBox = new TextBox { Width = 240, Height = 32, Text = search, [ToolTip.TipProperty] = "Search repos" };
+            Avalonia.Automation.AutomationProperties.SetName(searchBox, "Search repos");
             var cardsHost = new StackPanel();
             searchBox.TextChanged += delegate { search = searchBox.Text; FillRepoGroups(cardsHost); };
             Marks["search"] = searchBox;
@@ -30,9 +27,9 @@ namespace Hatpick
             var hatGrid = Ui.Cards(260);
             hatGrid.Margin = new Thickness(0, 10, 0, 26);
             foreach (var a in settings.accounts) hatGrid.Children.Add(HatCard(a));
-            var add = new Button { Style = Ui.Style("Card"), MinHeight = 82, Margin = new Thickness(0, 0, 12, 12) };
-            add.SetResourceReference(Control.BorderBrushProperty, "Dashed");
-            add.Background = System.Windows.Media.Brushes.Transparent;
+            var add = new Button { Theme = Ui.Theme("Card"), MinHeight = 82, Margin = new Thickness(0, 0, 12, 12) };
+            add.SetResourceReference(TemplatedControl.BorderBrushProperty, "Dashed");
+            add.Background = Brushes.Transparent;
             add.Content = CenterRow(Ui.Icon("plus", 16, "Muted"), Ui.Text("Add a hat", 13, "Muted"));
             add.Click += delegate { AddAccount(); };
             hatGrid.Children.Add(add);
@@ -56,7 +53,7 @@ namespace Hatpick
             {
                 var empty = Ui.Panel(Ui.Stack(10,
                     Ui.Text("No repos yet", 16, "Text", FontWeights.SemiBold),
-                    Ui.Text("Watch the folder where you keep your repos (GitHub Desktop uses Documents\\GitHub), or drop any repo folder onto this window.", 13.5, "Sub"),
+                    Ui.Text("Watch the folder where you keep your repos (GitHub Desktop uses " + Platform.ReposFolder + "), or drop any repo folder onto this window.", 13.5, "Sub"),
                     Ui.Row(8, Ui.Btn("Watch a folder", PickAndWatch, "BtnPrimary"), Ui.Btn("Add a single repo", PickSingle))), 22);
                 sp.Children.Add(empty);
                 return PageScroll(sp);
@@ -79,7 +76,7 @@ namespace Hatpick
             return "Git Credential Manager: " + string.Join(", ", gcm) + " signed in";
         }
 
-        static StackPanel CenterRow(params UIElement[] items)
+        static StackPanel CenterRow(params Control[] items)
         {
             var r = Ui.Row(8, items);
             r.HorizontalAlignment = HorizontalAlignment.Center;
@@ -103,7 +100,7 @@ namespace Hatpick
             var who = Ui.Stack(2, Ui.Text(a.label, 16, "Text", FontWeights.SemiBold), Ui.MonoText(string.IsNullOrEmpty(a.github) ? a.email : a.github, 12, "Muted"));
             who.VerticalAlignment = VerticalAlignment.Center;
             g.Children.Add(who);
-            var b = new Button { Style = Ui.Style("Card"), Content = g, Margin = new Thickness(0, 0, 12, 12) };
+            var b = new Button { Theme = Ui.Theme("Card"), Content = g, Margin = new Thickness(0, 0, 12, 12) };
             b.Click += delegate { Navigate("hats"); };
             return b;
         }
@@ -158,22 +155,22 @@ namespace Hatpick
 
         void PickHatFor(RepoReport r, Button anchor)
         {
-            var popup = new Popup { PlacementTarget = anchor, Placement = PlacementMode.Bottom, StaysOpen = false, AllowsTransparency = true, VerticalOffset = 4 };
+            Action close = null;
             var list = new StackPanel();
             foreach (var a in settings.accounts)
             {
                 var acct = a;
                 var row = Ui.Row(10, Hats.For(a, 22), Ui.Stack(0, Ui.Text(a.label, 13, "Text", FontWeights.SemiBold), Ui.Text(a.email, 11.5, "Muted")));
-                var b = new Button { Style = Ui.Style("Row"), Content = row, MinHeight = 40 };
-                b.Click += delegate { popup.IsOpen = false; Apply(r, acct, acct.github); };
+                var b = new Button { Theme = Ui.Theme("Row"), Content = row, MinHeight = 40 };
+                b.Click += delegate { close(); Apply(r, acct, acct.github); };
                 list.Children.Add(b);
             }
-            if (settings.accounts.Count == 0) list.Children.Add(Ui.Btn("Add a hat first", delegate { popup.IsOpen = false; AddAccount(); }, "BtnLink"));
+            if (settings.accounts.Count == 0) list.Children.Add(Ui.Btn("Add a hat first", delegate { close(); AddAccount(); }, "BtnLink"));
             var card = Ui.Panel(list, 6);
             card.MinWidth = 220;
-            card.Margin = new Thickness(0, 0, 12, 12);
-            popup.Child = card;
-            popup.IsOpen = true;
+            card.Margin = new Thickness(0, 4, 12, 12);
+            card.BoxShadow = Ui.Shadow();
+            close = Ui.ShowPopup(anchor, card);
         }
 
         void FillRepoGroups(StackPanel into)
@@ -191,7 +188,7 @@ namespace Hatpick
                 AddGroup(into, f.path, def != null ? "wears " + def.label + " by default" : "no default hat", items);
             }
             AddGroup(into, "Single repos", "set one at a time", reports.Where(r => r.Source == RepoSource.Single && match(r)).ToList());
-            AddGroup(into, "Analyzed, not in your list", "dropped or opened from Explorer", reports.Where(r => r.Source == RepoSource.Opened && match(r)).ToList());
+            AddGroup(into, "Analyzed, not in your list", "dropped or opened from " + Platform.FileManager, reports.Where(r => r.Source == RepoSource.Opened && match(r)).ToList());
             if (into.Children.Count == 0 && q.Length > 0) into.Children.Add(Ui.Text("No repos match \"" + q + "\".", 13, "Muted"));
         }
 
@@ -233,13 +230,13 @@ namespace Hatpick
             note.TextTrimming = TextTrimming.CharacterEllipsis;
             sp.Children.Add(note);
 
-            var b = new Button { Style = Ui.Style("Card"), Content = sp, Margin = new Thickness(0, 0, 12, 12), ToolTip = r.Path };
-            if (r.Level == Level.Warn) b.SetResourceReference(Control.BorderBrushProperty, "Accent");
+            var b = new Button { Theme = Ui.Theme("Card"), Content = sp, Margin = new Thickness(0, 0, 12, 12), [ToolTip.TipProperty] = r.Path };
+            if (r.Level == Level.Warn) b.SetResourceReference(TemplatedControl.BorderBrushProperty, "Accent");
             b.Click += delegate { Navigate("repos", r.Path); };
             return b;
         }
 
-        static FrameworkElement Pad(FrameworkElement e, double left, double right)
+        static Control Pad(Control e, double left, double right)
         {
             e.Margin = new Thickness(left, 0, right, 0);
             e.VerticalAlignment = VerticalAlignment.Center;
@@ -247,14 +244,14 @@ namespace Hatpick
         }
 
         // The hat a repo commits / pushes with. An account Hatpick doesn't know shows as a person.
-        FrameworkElement CommitHatIcon(RepoReport r, double size)
+        Control CommitHatIcon(RepoReport r, double size)
         {
             if (r.Error != null || r.Email.Length == 0) return Hats.Icon("none", size);
             var a = CommitHat(r);
             return a != null ? Hats.For(a, size) : Ui.Icon("user", size, "Muted");
         }
 
-        FrameworkElement PushHatIcon(RepoReport r, double size)
+        Control PushHatIcon(RepoReport r, double size)
         {
             if (r.PushUser.Length == 0) return Hats.Icon("none", size);
             var a = PushHat(r);

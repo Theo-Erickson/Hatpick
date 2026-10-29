@@ -31,7 +31,7 @@ namespace Hatpick
                 "Each card shows the hat a repo commits with and the hat it pushes with. Two different hats means they don't match; a dashed circle means no hat.") },
 
             { "folders", new Topic("Watched folders vs. single repos",
-                "Watch a folder when it holds several repos, like Documents\\GitHub. Hatpick lists every repo inside it, and you can give the " +
+                "Watch a folder when it holds several repos, like " + Platform.ReposFolder + ". Hatpick lists every repo inside it, and you can give the " +
                 "folder a default hat. That default applies to every repo in the folder, including repos you clone or create there later.\n\n" +
                 "Add a single repo when it lives somewhere else. It has no folder default, so you pick its hat directly.\n\n" +
                 "Either way, a repo's own setting beats the folder default, and the folder default beats your global settings.") },
@@ -60,7 +60,7 @@ namespace Hatpick
 
             { "signin", new Topic("Signing in",
                 "Git Credential Manager keeps your GitHub sign-ins. If it doesn't have one for a push account yet, the first push opens your browser to sign in, and after that it's saved.\n\n" +
-                "You can sign in ahead of time from Hats > Sign in another account, or from Git Bash:\n\n    git credential-manager github login\n\n" +
+                "You can sign in ahead of time from Hats > Sign in another account, or from a terminal:\n\n    git credential-manager github login\n\n" +
                 "Hatpick only reads the list of account names. It never sees the sign-in itself.") },
 
             { "reset", new Topic("Resetting",

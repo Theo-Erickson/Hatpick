@@ -19,7 +19,7 @@ namespace Hatpick
 
     // Everything that touches git. Hatpick only ever reads and writes plain config
     // settings. It never asks git or Git Credential Manager for a password or token
-    // (never runs "git credential fill"), so secrets stay in Windows Credential Manager.
+    // (never runs "git credential fill"), so secrets stay in the system's credential store.
     static class Git
     {
         public const string CredKey = "credential.https://github.com.username";
@@ -33,18 +33,19 @@ namespace Hatpick
 
         // ---------- finding and running git ----------
 
+        // Apps opened from the Dock or a desktop menu don't get your shell's PATH, so these are
+        // checked too (Homebrew first). Git also looks in them for git-credential-manager.
+        static readonly string[] UnixDirs = { "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin" };
+
         static string Find()
         {
-            foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(';'))
+            string onPath = Platform.OnPath("git");
+            if (onPath != null) return onPath;
+            if (!Platform.Windows)
             {
-                try
-                {
-                    string d = dir.Trim().Trim('"');
-                    if (d.Length == 0) continue;
-                    string p = Path.Combine(d, "git.exe");
-                    if (File.Exists(p)) return p;
-                }
-                catch { }
+                foreach (var d in UnixDirs)
+                    if (File.Exists(Path.Combine(d, "git"))) return Path.Combine(d, "git");
+                return null;
             }
             string pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
             string c = Path.Combine(pf, @"Git\cmd\git.exe");
@@ -70,6 +71,7 @@ namespace Hatpick
         {
             get
             {
+                if (!Platform.Windows || Exe == null) return null;
                 try
                 {
                     string root = Path.GetDirectoryName(Path.GetDirectoryName(Exe));
@@ -80,35 +82,27 @@ namespace Hatpick
             }
         }
 
-        // Windows command-line quoting (the rules CommandLineToArgvW / the C runtime use).
-        public static string Quote(string a)
+        // A git process with these arguments (each passed as-is, no quoting), run from home.
+        public static ProcessStartInfo Start(IEnumerable<string> args)
         {
-            if (a.Length > 0 && a.IndexOfAny(new[] { ' ', '\t', '"' }) < 0) return a;
-            var sb = new StringBuilder("\"");
-            int bs = 0;
-            foreach (char ch in a)
+            var psi = new ProcessStartInfo(Exe) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Home };
+            foreach (var a in args) psi.ArgumentList.Add(a);
+            if (!Platform.Windows)
             {
-                if (ch == '\\') { bs++; continue; }
-                if (ch == '"') { sb.Append('\\', bs * 2 + 1); sb.Append('"'); }
-                else { sb.Append('\\', bs); sb.Append(ch); }
-                bs = 0;
+                string path;
+                psi.Environment.TryGetValue("PATH", out path);
+                psi.Environment["PATH"] = string.Join(":", (path ?? "").Split(':').Concat(UnixDirs).Where(d => d.Length > 0).Distinct());
             }
-            sb.Append('\\', bs * 2);
-            sb.Append('"');
-            return sb.ToString();
+            Demo.Isolate(psi);
+            return psi;
         }
 
         public static GitResult Run(params string[] args)
         {
-            var psi = new ProcessStartInfo(Exe, string.Join(" ", args.Select(Quote)))
-            {
-                UseShellExecute = false, CreateNoWindow = true,
-                RedirectStandardOutput = true, RedirectStandardError = true,
-                StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8,
-                WorkingDirectory = Home
-            };
+            var psi = Start(args);
+            psi.RedirectStandardOutput = true; psi.RedirectStandardError = true;
+            psi.StandardOutputEncoding = Encoding.UTF8; psi.StandardErrorEncoding = Encoding.UTF8;
             psi.EnvironmentVariables["GIT_TERMINAL_PROMPT"] = "0";   // never block waiting for input
-            Demo.Isolate(psi);
             using (var p = Process.Start(psi))
             {
                 var err = p.StandardError.ReadToEndAsync();
@@ -185,15 +179,13 @@ namespace Hatpick
             return list;
         }
 
-        // Opens a console window running GCM's own sign-in (it opens your browser).
+        // Runs GCM's own sign-in (in a console window on Windows; it opens your browser).
         // Hatpick never sees what you type there.
         public static Process StartGcmLogin()
         {
             if (Demo.On) throw new Exception("This is the demo, so there's nothing to sign in to.");
-            var psi = new ProcessStartInfo(Exe, "credential-manager github login")
-            {
-                UseShellExecute = false, CreateNoWindow = false, WorkingDirectory = Home
-            };
+            var psi = Start(new[] { "credential-manager", "github", "login" });
+            psi.CreateNoWindow = false;
             return Process.Start(psi);
         }
 

@@ -5,9 +5,12 @@ namespace Hatpick
 {
     // "Analyze with Hatpick" in the right-click menu of folders (and of a folder's empty
     // space). Lives under HKEY_CURRENT_USER, so it needs no admin rights and only affects you.
-    // On Windows 11 it shows under "Show more options".
+    // On Windows 11 it shows under "Show more options". Windows only: elsewhere, drop a
+    // folder on the window or pass it on the command line (hatpick ~/code/my-repo).
     static class ExplorerMenu
     {
+        public static bool Supported { get { return OperatingSystem.IsWindows(); } }
+
         static readonly string[] Keys =
         {
             @"Software\Classes\Directory\shell\Hatpick",
@@ -18,7 +21,7 @@ namespace Hatpick
         {
             get
             {
-                if (Demo.On) return false;
+                if (Demo.On || !OperatingSystem.IsWindows()) return false;
                 try { using (var k = Registry.CurrentUser.OpenSubKey(Keys[0])) return k != null; }
                 catch { return false; }
             }
@@ -26,7 +29,7 @@ namespace Hatpick
 
         public static void Install(string exe)
         {
-            if (Demo.On) return;   // the demo never touches the registry
+            if (Demo.On || !OperatingSystem.IsWindows()) return;   // the demo never touches the registry
             foreach (var path in Keys)
             {
                 using (var k = Registry.CurrentUser.CreateSubKey(path))
@@ -41,7 +44,7 @@ namespace Hatpick
 
         public static void Remove()
         {
-            if (Demo.On) return;
+            if (Demo.On || !OperatingSystem.IsWindows()) return;
             foreach (var path in Keys)
             {
                 try { Registry.CurrentUser.DeleteSubKeyTree(path, false); } catch { }

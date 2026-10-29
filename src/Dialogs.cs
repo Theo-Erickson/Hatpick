@@ -1,35 +1,42 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Media;
 
 namespace Hatpick
 {
-    // A dialog window that follows the theme (background, fonts, dark title bar).
+    // A dialog window that follows the theme (background, fonts, title bar).
     class ThemedWindow : Window
     {
+        readonly Window owner;
+
         public ThemedWindow(Window owner, string title, double width)
         {
+            this.owner = owner;
             Title = title;
-            Owner = owner;
             Width = width;
             SizeToContent = SizeToContent.Height;
-            ResizeMode = ResizeMode.NoResize;
+            CanResize = false;
             ShowInTaskbar = false;
             WindowStartupLocation = owner != null ? WindowStartupLocation.CenterOwner : WindowStartupLocation.CenterScreen;
-            FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI");
+            FontFamily = Platform.UiFont;
             FontSize = 14;
-            SetResourceReference(BackgroundProperty, "Bg");
-            SetResourceReference(ForegroundProperty, "Text");
-            SourceInitialized += delegate { Theme.DarkTitleBar(this); };
+            this.SetResourceReference(BackgroundProperty, "Bg");
+            this.SetResourceReference(ForegroundProperty, "Text");
             KeyDown += (s, e) => { if (e.Key == Key.Escape) Close(); };
         }
 
+        // Shows the dialog and returns once it's closed (like WPF's ShowDialog), so callers
+        // can read what was picked on the next line.
+        public void ShowModal()
+        {
+            var frame = new DispatcherFrame();
+            Closed += delegate { frame.Continue = false; };
+            if (owner != null && owner.IsVisible) ShowDialog(owner); else Show();
+            Dispatcher.UIThread.PushFrame(frame);
+        }
+
         // Standard layout: content, then a right-aligned button row.
-        public void Layout(UIElement content, params Button[] buttons)
+        public void Layout(Control content, params Button[] buttons)
         {
             var root = new DockPanel { Margin = new Thickness(24, 20, 24, 20) };
             var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 20, 0, 0) };
@@ -48,7 +55,7 @@ namespace Hatpick
             return Ask(owner, title, Ui.Text(message, 14, "Sub"), ok, cancel, primary);
         }
 
-        public static bool Ask(Window owner, string title, UIElement body, string ok, string cancel, bool primary)
+        public static bool Ask(Window owner, string title, Control body, string ok, string cancel, bool primary)
         {
             var w = new ThemedWindow(owner, title, 520);
             bool result = false;
@@ -59,7 +66,7 @@ namespace Hatpick
                 ? new[] { Ui.Btn(cancel, delegate { w.Close(); }), okBtn }
                 : new[] { okBtn };
             w.Layout(content, buttons);
-            w.ShowDialog();
+            w.ShowModal();
             return result;
         }
 
@@ -68,7 +75,19 @@ namespace Hatpick
             Ask(owner, title, message, "OK", null, true);
         }
 
-        public static FrameworkElement IssueList(IEnumerable<Issue> issues)
+        // Waits for an async call (a file picker, say) without freezing the window.
+        public static T Wait<T>(System.Threading.Tasks.Task<T> task)
+        {
+            if (!task.IsCompleted)
+            {
+                var frame = new DispatcherFrame();
+                task.ContinueWith(delegate { Dispatcher.UIThread.Post(delegate { frame.Continue = false; }); });
+                Dispatcher.UIThread.PushFrame(frame);
+            }
+            return task.GetAwaiter().GetResult();
+        }
+
+        public static Control IssueList(IEnumerable<Issue> issues)
         {
             var sp = new StackPanel();
             foreach (var i in issues)
@@ -138,11 +157,12 @@ namespace Hatpick
                 foreach (var k in HatKinds.All)
                 {
                     var kind = k;
-                    var b = new Button { Style = Ui.Style("Card"), Width = 52, Height = 52, Padding = new Thickness(5), Margin = new Thickness(0, 0, 6, 6), ToolTip = Hats.Names[kind] };
+                    var b = new Button { Theme = Ui.Theme("Card"), Width = 52, Height = 52, Padding = new Thickness(5), Margin = new Thickness(0, 0, 6, 6) };
+                    b.Tip(Hats.Names[kind]);
                     b.Content = Hats.Icon(kind, 34, colors);
                     if (kind == hat) { b.SetResourceReference(BorderBrushProperty, "Accent"); b.BorderThickness = new Thickness(2); }
                     b.Click += delegate { hat = kind; refreshKinds(); Refresh(); };
-                    System.Windows.Automation.AutomationProperties.SetName(b, Hats.Names[kind]);
+                    Avalonia.Automation.AutomationProperties.SetName(b, Hats.Names[kind]);
                     hats.Children.Add(b);
                 }
             };
@@ -193,7 +213,7 @@ namespace Hatpick
             var ok = Ui.Btn("Save", Save, "BtnPrimary");
             ok.IsDefault = true;
             Layout(new ScrollViewer { Content = sp, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = 700 }, Ui.Btn("Cancel", Close), ok);
-            Loaded += delegate { label.Focus(); };
+            Opened += delegate { label.Focus(); };
         }
 
         Action colorsChanged;
@@ -204,7 +224,7 @@ namespace Hatpick
         void Refresh()
         {
             string pic = PicturePath;
-            FrameworkElement art;
+            Control art;
             art = pic != null ? LoadPicture(pic, 80) : Hats.Icon(hat, 80, colors);
             Hats.PaintTile(preview, hat, colors, pic != null);
             art.HorizontalAlignment = HorizontalAlignment.Center;
@@ -220,7 +240,7 @@ namespace Hatpick
             bgRow.Children.Clear();
             bgRow.Children.Add(ColorRow("bg", "Tile", TileDefault(pic != null)));
 
-            removePicture.Visibility = pic != null ? Visibility.Visible : Visibility.Collapsed;
+            removePicture.IsVisible = pic != null;
             pictureNote.Text = pic != null
                 ? "Using " + System.IO.Path.GetFileName(pic) + " instead of a drawn hat. Remove it to use colors again."
                 : "PNG, JPG or ICO. Square pictures look best. Used instead of the drawn hat.";
@@ -231,77 +251,76 @@ namespace Hatpick
         {
             var probe = new Border();
             Hats.PaintTile(probe, hat, colors.Where(kv => kv.Key != "bg").ToDictionary(kv => kv.Key, kv => kv.Value), picture);
-            var b = probe.Background as SolidColorBrush ?? TryFindResource(picture ? "Input" : Hats.TintKey(hat)) as SolidColorBrush;
+            var b = probe.Background as SolidColorBrush ?? AppTheme.Brush(picture ? "Input" : Hats.TintKey(hat)) as SolidColorBrush;
             if (b == null) return "#2a2d3a";
             var c = b.Color;
             if (c.A < 255)   // a see-through tint: show what it looks like over the window
             {
-                var bg = (TryFindResource("Bg") as SolidColorBrush ?? new SolidColorBrush(Colors.Black)).Color;
+                var bg = (AppTheme.Brush("Bg") as SolidColorBrush ?? new SolidColorBrush(Colors.Black)).Color;
                 Func<byte, byte, byte> mix = (f, k) => (byte)((f * c.A + k * (255 - c.A)) / 255);
                 c = Color.FromRgb(mix(c.R, bg.R), mix(c.G, bg.G), mix(c.B, bg.B));
             }
             return string.Format("#{0:x2}{1:x2}{2:x2}", c.R, c.G, c.B);
         }
 
-        FrameworkElement ColorRow(string key, string caption, string fallback)
+        Control ColorRow(string key, string caption, string fallback)
         {
             var part = new { Key = key, Name = caption };
             bool custom = colors.ContainsKey(key);
             string current = custom ? colors[key] : fallback;
 
-            var swatch = new Button { Width = 46, Height = 34, Padding = new Thickness(0), Margin = new Thickness(0, 0, 10, 0), Cursor = Cursors.Hand, ToolTip = "Pick a color for the " + part.Name.ToLower() };
-            swatch.Style = Ui.Style("Btn");
+            var swatch = new Button { Width = 46, Height = 34, Padding = new Thickness(0), Margin = new Thickness(0, 0, 10, 0), Cursor = new Cursor(StandardCursorType.Hand) };
+            swatch.Tip("Pick a color for the " + part.Name.ToLower());
+            swatch.Theme = Ui.Theme("Btn");
             swatch.Content = new Border { Width = 28, Height = 20, CornerRadius = new CornerRadius(5), Background = Brush(current), BorderBrush = new SolidColorBrush(Color.FromArgb(70, 0, 0, 0)), BorderThickness = new Thickness(1) };
-            System.Windows.Automation.AutomationProperties.SetName(swatch, part.Name + " color");
+            Avalonia.Automation.AutomationProperties.SetName(swatch, part.Name + " color");
 
-            var hex = new TextBox { Text = current, Width = 112, Height = 34, Padding = new Thickness(10, 0, 10, 0), MaxLength = 7, FontFamily = new FontFamily("Cascadia Mono, Consolas"), VerticalContentAlignment = VerticalAlignment.Center };
-            System.Windows.Automation.AutomationProperties.SetName(hex, part.Name + " color, hex");
+            var hex = new TextBox { Text = current, Width = 112, Height = 34, Padding = new Thickness(10, 0, 10, 0), MaxLength = 7, FontFamily = Ui.Mono, VerticalContentAlignment = VerticalAlignment.Center };
+            Avalonia.Automation.AutomationProperties.SetName(hex, part.Name + " color, hex");
             Action commitHex = delegate
             {
                 string v = NormalizeHex(hex.Text);
                 if (v == null) { hex.Text = current; return; }
                 if (!string.Equals(v, current, StringComparison.OrdinalIgnoreCase)) { colors[part.Key] = v; colorsChanged(); }
             };
-            hex.LostKeyboardFocus += delegate { commitHex(); };
+            hex.LostFocus += delegate { commitHex(); };
             hex.KeyDown += (s, e) => { if (e.Key == Key.Enter) { commitHex(); e.Handled = true; } };
 
-            var popup = new System.Windows.Controls.Primitives.Popup { PlacementTarget = swatch, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom, StaysOpen = false, AllowsTransparency = true };
-            var grid = new WrapPanel { Width = 8 * 36 };
-            foreach (var c in Palette)
+            swatch.Click += delegate
             {
-                var col = c;
-                var b = new Button { Width = 30, Height = 30, Margin = new Thickness(3), Padding = new Thickness(0), Cursor = Cursors.Hand, ToolTip = col, Style = Ui.Style("Btn") };
-                b.Content = new Border { Width = 22, Height = 22, CornerRadius = new CornerRadius(11), Background = Brush(col) };
-                System.Windows.Automation.AutomationProperties.SetName(b, col);
-                b.Click += delegate { popup.IsOpen = false; colors[part.Key] = col; colorsChanged(); };
-                grid.Children.Add(b);
-            }
-            var card = new Border { Padding = new Thickness(10), CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(1), Child = grid, Margin = new Thickness(0, 4, 0, 0) };
-            card.SetResourceReference(Border.BackgroundProperty, "Panel");
-            card.SetResourceReference(Border.BorderBrushProperty, "Border");
-            popup.Child = card;
-            swatch.Click += delegate { popup.IsOpen = true; };
+                Action close = null;
+                var grid = new WrapPanel { Width = 8 * 36 };
+                foreach (var c in Palette)
+                {
+                    var col = c;
+                    var b = new Button { Width = 30, Height = 30, Margin = new Thickness(3), Padding = new Thickness(0), Cursor = new Cursor(StandardCursorType.Hand), Theme = Ui.Theme("Btn") };
+                    b.Tip(col);
+                    b.Content = new Border { Width = 22, Height = 22, CornerRadius = new CornerRadius(11), Background = Brush(col) };
+                    Avalonia.Automation.AutomationProperties.SetName(b, col);
+                    b.Click += delegate { close(); colors[part.Key] = col; colorsChanged(); };
+                    grid.Children.Add(b);
+                }
+                var card = new Border { Padding = new Thickness(10), CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(1), Child = grid, Margin = new Thickness(0, 4, 12, 12), BoxShadow = Ui.Shadow() };
+                card.SetResourceReference(Border.BackgroundProperty, "Panel");
+                card.SetResourceReference(Border.BorderBrushProperty, "Border");
+                close = Ui.ShowPopup(swatch, card);
+            };
 
             var row = Ui.Row(0, Gap(Ui.Text(part.Name, 13, "Sub"), 0, 0), swatch, hex);
-            ((FrameworkElement)row.Children[0]).Width = 96;
-            ((FrameworkElement)row.Children[0]).VerticalAlignment = VerticalAlignment.Center;
+            ((Control)row.Children[0]).Width = 96;
+            ((Control)row.Children[0]).VerticalAlignment = VerticalAlignment.Center;
             if (custom)
             {
                 var reset = Ui.Btn("Reset", delegate { colors.Remove(part.Key); colorsChanged(); }, "BtnGhost");
                 reset.Height = 34; reset.Margin = new Thickness(10, 0, 0, 0);
-                reset.ToolTip = key == "bg" ? "Back to the theme's background" : "Back to " + fallback;
+                reset.Tip(key == "bg" ? "Back to the theme's background" : "Back to " + fallback);
                 row.Children.Add(reset);
             }
             row.Margin = new Thickness(0, 0, 0, 10);
-            row.Children.Add(popup);
             return row;
         }
 
-        static SolidColorBrush Brush(string hex)
-        {
-            try { return (SolidColorBrush)new BrushConverter().ConvertFromString(hex); }
-            catch { return new SolidColorBrush(Colors.Gray); }
-        }
+        static SolidColorBrush Brush(string hex) { return Hats.B(hex); }
 
         // "#abc", "abc", "#aabbcc" -> "#aabbcc"; anything else -> null
         public static string NormalizeHex(string s)
@@ -313,17 +332,12 @@ namespace Hatpick
             return "#" + s.ToLowerInvariant();
         }
 
-        static FrameworkElement LoadPicture(string path, double size)
+        static Control LoadPicture(string path, double size)
         {
             try
             {
-                var bmp = new System.Windows.Media.Imaging.BitmapImage();
-                bmp.BeginInit();
-                bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                bmp.UriSource = new Uri(path);
-                bmp.DecodePixelWidth = (int)(size * 2);
-                bmp.EndInit();
-                bmp.Freeze();
+                Avalonia.Media.Imaging.Bitmap bmp;
+                using (var f = System.IO.File.OpenRead(path)) bmp = Avalonia.Media.Imaging.Bitmap.DecodeToWidth(f, (int)(size * 2));
                 return new Image { Source = bmp, Width = size, Height = size, Stretch = Stretch.Uniform };
             }
             catch { return Hats.Icon("none", size); }
@@ -331,25 +345,21 @@ namespace Hatpick
 
         void PickPicture()
         {
-            var dlg = new Microsoft.Win32.OpenFileDialog
-            {
-                Title = "Pick a picture for this hat",
-                Filter = "Pictures (*.png;*.jpg;*.jpeg;*.ico;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.ico;*.bmp;*.gif",
-            };
-            if (dlg.ShowDialog(this) != true) return;
-            var info = new System.IO.FileInfo(dlg.FileName);
+            string file = FolderPicker.PickFile(this, "Pick a picture for this hat", "Pictures", "*.png", "*.jpg", "*.jpeg", "*.ico", "*.bmp", "*.gif");
+            if (file == null) return;
+            var info = new System.IO.FileInfo(file);
             if (info.Length > 4 * 1024 * 1024) { Dialogs.Info(this, "Picture too big", "Pick a picture under 4 MB. Hats are drawn small, so 256 x 256 is plenty."); return; }
-            newPicture = dlg.FileName;
+            newPicture = file;
             Refresh();
         }
 
-        static FrameworkElement Gap(FrameworkElement e, double top, double bottom) { e.Margin = new Thickness(0, top, 0, bottom); return e; }
+        static Control Gap(Control e, double top, double bottom) { e.Margin = new Thickness(0, top, 0, bottom); return e; }
 
         TextBox Field(StackPanel sp, string caption, string value, string hint)
         {
             sp.Children.Add(Ui.Text(caption, 12, "Muted"));
             var t = new TextBox { Text = value ?? "", Margin = new Thickness(0, 4, 0, 2), Height = 34 };
-            System.Windows.Automation.AutomationProperties.SetName(t, caption);
+            Avalonia.Automation.AutomationProperties.SetName(t, caption);
             sp.Children.Add(t);
             sp.Children.Add(Gap(Ui.Text(hint, 11.5, "Faint"), 0, 12));
             return t;
@@ -388,7 +398,7 @@ namespace Hatpick
         public static bool Edit(Window owner, Account target, List<Account> all, Account self, List<string> gcm)
         {
             var w = new AccountEditor(owner, target, all, self, gcm);
-            w.ShowDialog();
+            w.ShowModal();
             return w.saved;
         }
     }

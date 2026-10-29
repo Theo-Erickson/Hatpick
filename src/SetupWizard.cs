@@ -2,9 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Shapes;
+using Avalonia.Controls.Shapes;
 
 namespace Hatpick
 {
@@ -13,7 +11,7 @@ namespace Hatpick
     class SetupWizard : ThemedWindow
     {
         readonly Settings settings;
-        readonly List<Func<FrameworkElement>> pages = new List<Func<FrameworkElement>>();
+        readonly List<Func<Control>> pages = new List<Func<Control>>();
         int page;
         Border host;
         StackPanel dots;
@@ -68,7 +66,7 @@ namespace Hatpick
             }
             back.IsEnabled = page > 0;
             next.Content = page == pages.Count - 1 ? "Finish" : "Next";
-            skip.Visibility = page == pages.Count - 1 ? Visibility.Collapsed : Visibility.Visible;
+            skip.IsVisible = page != pages.Count - 1;
             next.Focus();
         }
 
@@ -80,7 +78,7 @@ namespace Hatpick
             return sp;
         }
 
-        FrameworkElement Welcome()
+        Control Welcome()
         {
             var sp = Page("Welcome to Hatpick", "Each of your GitHub accounts is a hat. Hatpick makes sure every repo wears the right one - for the name on your commits, and for the account you push with.");
             var hats = Ui.Row(14, Hats.Tile("hardhat", 64), Hats.Tile("beanie", 64), Hats.Tile("tophat", 64));
@@ -93,19 +91,19 @@ namespace Hatpick
                 t.Margin = new Thickness(0, 8, 0, 0);
                 sp.Children.Add(t);
             }
-            var safe = Ui.Panel(Ui.Text("Hatpick never signs in and never sees a password or token. Your sign-ins stay in Git Credential Manager (part of Git for Windows); " +
+            var safe = Ui.Panel(Ui.Text("Hatpick never signs in and never sees a password or token. Your sign-ins stay in Git Credential Manager; " +
                 "Hatpick only writes plain git settings that say which one to use, and everything it changes can be reset.", 13, "InfoText"), 14, "InfoBg", "InfoBorder", 10);
             safe.Margin = new Thickness(0, 20, 0, 0);
             sp.Children.Add(safe);
             return sp;
         }
 
-        FrameworkElement SignIn()
+        Control SignIn()
         {
             var sp = Page("Sign in your accounts", "Git Credential Manager keeps your GitHub sign-ins. Sign each account in once and it remembers it.");
             if (!Git.GcmAvailable)
             {
-                sp.Children.Add(Ui.Panel(Ui.Text("Git Credential Manager wasn't found. It comes with Git for Windows - install or update it from git-scm.com. You can still finish setup; pushes will just keep asking you to sign in.", 13, "WarnText"), 14, "WarnBg", "WarnBorder", 10));
+                sp.Children.Add(Ui.Panel(Ui.Text("Git Credential Manager wasn't found. " + Platform.GcmInstall + " You can still finish setup; pushes will just keep asking you to sign in.", 13, "WarnText"), 14, "WarnBg", "WarnBorder", 10));
                 return sp;
             }
             sp.Children.Add(Ui.Text("Signed in right now", 13, "Muted", FontWeights.SemiBold));
@@ -124,18 +122,18 @@ namespace Hatpick
                 {
                     var p = Git.StartGcmLogin();
                     p.EnableRaisingEvents = true;
-                    p.Exited += delegate { Dispatcher.BeginInvoke((Action)delegate { gcm = Git.CredentialManagerAccounts(); if (page == 1) Go(1); }); };
+                    p.Exited += delegate { Dispatcher.UIThread.Post(delegate { gcm = Git.CredentialManagerAccounts(); if (page == 1) Go(1); }); };
                 }
                 catch (Exception e) { Dialogs.Info(this, "Couldn't start Git Credential Manager", e.Message); }
             }), Ui.Btn("Refresh", delegate { gcm = Git.CredentialManagerAccounts(); Go(1); }));
             sp.Children.Add(row);
-            var note = Ui.Text("\"Sign in an account\" opens a small console window and your browser. When the console closes, this list updates. Do it once per account; if an account is already listed, skip ahead.", 12.5, "Muted");
+            var note = Ui.Text("\"Sign in an account\" opens " + Platform.SignInWindow + ". " + Platform.SignInDone + ", this list updates. Do it once per account; if an account is already listed, skip ahead.", 12.5, "Muted");
             note.Margin = new Thickness(0, 12, 0, 0);
             sp.Children.Add(note);
             return sp;
         }
 
-        FrameworkElement HatsStep()
+        Control HatsStep()
         {
             var sp = Page("Make your hats", "One hat per account. Use the email that's on that GitHub account so GitHub credits your commits.");
             foreach (var a in settings.accounts)
@@ -180,7 +178,7 @@ namespace Hatpick
             Go(page);
         }
 
-        FrameworkElement FoldersStep()
+        Control FoldersStep()
         {
             var sp = Page("Pick your repo folders", "Watch the folders where you keep repos. Every repo inside is listed, and a folder's default hat applies to all of them - including repos you clone there later.");
             string gh = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "GitHub");
@@ -216,14 +214,16 @@ namespace Hatpick
             return sp;
         }
 
-        FrameworkElement Done()
+        Control Done()
         {
             int defaults = settings.folders.Count(f => !string.IsNullOrEmpty(f.account));
             var sp = Page("You're set", settings.accounts.Count + " hat(s), " + settings.folders.Count + " watched folder(s)" + (defaults > 0 ? ", " + defaults + " with a default hat." : ".") +
                 " Next, Hatpick scans your folders and shows which hat each repo wears. Look for the ? buttons whenever something isn't clear.");
             tour = new CheckBox { Content = "Show me around (about a minute)", IsChecked = true, Margin = new Thickness(0, 0, 0, 12) };
-            explorer = new CheckBox { Content = "Add \"Analyze with Hatpick\" to Explorer's right-click menu for folders", IsChecked = ExplorerMenu.Installed };
             sp.Children.Add(tour);
+            explorer = null;
+            if (!ExplorerMenu.Supported) return sp;
+            explorer = new CheckBox { Content = "Add \"Analyze with Hatpick\" to Explorer's right-click menu for folders", IsChecked = ExplorerMenu.Installed };
             sp.Children.Add(explorer);
             var note = Ui.Text("The right-click entry is per-user and needs no admin rights. You can change it later on the Folders page.", 12.5, "Muted");
             note.Margin = new Thickness(0, 8, 0, 0);
@@ -235,7 +235,8 @@ namespace Hatpick
         {
             try
             {
-                if (explorer.IsChecked == true && !ExplorerMenu.Installed) ExplorerMenu.Install(Program.ExePath);
+                if (explorer == null) { }
+                else if (explorer.IsChecked == true && !ExplorerMenu.Installed) ExplorerMenu.Install(Platform.ExePath);
                 else if (explorer.IsChecked != true && ExplorerMenu.Installed) ExplorerMenu.Remove();
             }
             catch { }
@@ -246,7 +247,7 @@ namespace Hatpick
         public static bool Run(Window owner, Settings settings, out bool startTour)
         {
             var w = new SetupWizard(owner, settings);
-            w.ShowDialog();
+            w.ShowModal();
             startTour = w.finished && w.tour != null && w.tour.IsChecked == true;
             return w.finished;
         }

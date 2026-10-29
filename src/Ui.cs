@@ -1,10 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
-using System.Windows.Media;
-using System.Windows.Shapes;
+using Avalonia.Controls.Shapes;
 
 namespace Hatpick
 {
@@ -12,15 +8,32 @@ namespace Hatpick
     // theme keys (see Theme.cs), attached as dynamic references.
     static class Ui
     {
-        public static readonly FontFamily Mono = new FontFamily("Cascadia Mono, Consolas");
+        public static readonly FontFamily Mono = Platform.Mono;
 
-        public static T Res<T>(T el, DependencyProperty p, string key) where T : FrameworkElement
+        // A property that follows a theme brush (like WPF's SetResourceReference).
+        public static void SetResourceReference(this Control el, AvaloniaProperty p, string key)
         {
-            el.SetResourceReference(p, key);
-            return el;
+            el.Bind(p, el.GetResourceObservable(key));
         }
 
-        public static Style Style(string key) { return (Style)Application.Current.FindResource(key); }
+        public static ControlTheme Theme(string key) { return (ControlTheme)Application.Current.FindResource(key); }
+
+        public static void Tip(this Control el, object tip) { ToolTip.SetTip(el, tip); }
+
+        // A soft drop shadow, like the cards and menus have.
+        public static BoxShadows Shadow(double blur = 18, double y = 4, byte alpha = 90)
+        {
+            return new BoxShadows(new BoxShadow { OffsetX = y * 0.7, OffsetY = y * 0.7, Blur = blur, Color = Avalonia.Media.Color.FromArgb(alpha, 0, 0, 0) });
+        }
+
+        // Shows 'card' in a popup next to 'anchor'. Returns what closes it.
+        public static Action ShowPopup(Control anchor, Control card, PlacementMode placement = PlacementMode.BottomEdgeAlignedLeft)
+        {
+            var f = new Flyout { Content = card, Placement = placement };
+            f.FlyoutPresenterClasses.Add("bare");
+            f.ShowAt(anchor);
+            return f.Hide;
+        }
 
         public static TextBlock Text(string text, double size = 14, string brush = "Text", FontWeight? weight = null)
         {
@@ -47,23 +60,23 @@ namespace Hatpick
 
         public static Button Btn(string text, Action onClick, string style = "Btn")
         {
-            var b = new Button { Content = text, Style = Style(style) };
+            var b = new Button { Content = text, Theme = Theme(style) };
             if (onClick != null) b.Click += delegate { onClick(); };
             return b;
         }
 
-        public static Button IconBtn(UIElement icon, string text, Action onClick, string style = "Btn")
+        public static Button IconBtn(Control icon, string text, Action onClick, string style = "Btn")
         {
             var sp = new StackPanel { Orientation = Orientation.Horizontal };
             sp.Children.Add(icon);
             var t = new TextBlock { Text = text, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
             sp.Children.Add(t);
-            var b = new Button { Content = sp, Style = Style(style) };
+            var b = new Button { Content = sp, Theme = Theme(style) };
             if (onClick != null) b.Click += delegate { onClick(); };
             return b;
         }
 
-        public static Border Panel(UIElement child, double padding = 16, string bg = "Panel", string border = "Border", double radius = 12)
+        public static Border Panel(Control child, double padding = 16, string bg = "Panel", string border = "Border", double radius = 12)
         {
             var b = new Border { Child = child, Padding = new Thickness(padding), CornerRadius = new CornerRadius(radius), BorderThickness = new Thickness(1) };
             b.SetResourceReference(Border.BackgroundProperty, bg);
@@ -71,28 +84,28 @@ namespace Hatpick
             return b;
         }
 
-        public static StackPanel Row(double gap, params UIElement[] items)
+        public static StackPanel Row(double gap, params Control[] items)
         {
             var sp = new StackPanel { Orientation = Orientation.Horizontal };
             for (int i = 0; i < items.Length; i++)
             {
-                var fe = items[i] as FrameworkElement;
+                var fe = items[i] as Control;
                 if (fe != null && i > 0) fe.Margin = new Thickness(gap, fe.Margin.Top, fe.Margin.Right, fe.Margin.Bottom);
                 sp.Children.Add(items[i]);
             }
             return sp;
         }
 
-        public static StackPanel Stack(double gap, params UIElement[] items)
+        public static StackPanel Stack(double gap, params Control[] items)
         {
             var sp = new StackPanel();
             foreach (var it in items) Add(sp, it, gap);
             return sp;
         }
 
-        public static void Add(StackPanel sp, UIElement el, double gapAbove)
+        public static void Add(StackPanel sp, Control el, double gapAbove)
         {
-            var fe = el as FrameworkElement;
+            var fe = el as Control;
             if (fe != null && sp.Children.Count > 0) fe.Margin = new Thickness(fe.Margin.Left, gapAbove, fe.Margin.Right, fe.Margin.Bottom);
             sp.Children.Add(el);
         }
@@ -103,13 +116,13 @@ namespace Hatpick
             var g = new UniformGrid { Columns = 3 };
             g.SizeChanged += delegate
             {
-                int cols = Math.Max(1, Math.Min(3, (int)(g.ActualWidth / minCard)));
+                int cols = Math.Max(1, Math.Min(3, (int)(g.Bounds.Width / minCard)));
                 if (g.Columns != cols) g.Columns = cols;
             };
             return g;
         }
 
-        public static FrameworkElement Gap(FrameworkElement el, double right, double bottom)
+        public static Control Gap(Control el, double right, double bottom)
         {
             el.Margin = new Thickness(0, 0, right, bottom);
             return el;
@@ -158,12 +171,12 @@ namespace Hatpick
             { "close", "M6 6l12 12 M18 6L6 18" },
         };
 
-        public static FrameworkElement Icon(string name, double size = 18, string brush = "Muted", double stroke = 1.8)
+        public static Control Icon(string name, double size = 18, string brush = "Muted", double stroke = 1.8)
         {
             var p = new Path
             {
                 Data = Geometry.Parse(IconPaths[name]), StrokeThickness = stroke,
-                StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round
+                StrokeLineCap = PenLineCap.Round, StrokeJoin = PenLineJoin.Round
             };
             p.SetResourceReference(Shape.StrokeProperty, brush);
             var c = new Canvas { Width = 24, Height = 24 };
@@ -172,7 +185,7 @@ namespace Hatpick
         }
 
         // Filled status glyphs.
-        public static FrameworkElement StatusIcon(Level l, double size = 18)
+        public static Control StatusIcon(Level l, double size = 18)
         {
             var c = new Canvas { Width = 24, Height = 24 };
             if (l == Level.Warn)
@@ -209,7 +222,7 @@ namespace Hatpick
         {
             s.SetResourceReference(Shape.StrokeProperty, key);
             s.StrokeThickness = w;
-            s.StrokeStartLineCap = PenLineCap.Round; s.StrokeEndLineCap = PenLineCap.Round;
+            s.StrokeLineCap = PenLineCap.Round;
             return s;
         }
 
@@ -219,26 +232,25 @@ namespace Hatpick
         {
             HelpText.Topic t;
             if (topic == null || !HelpText.Topics.TryGetValue(topic, out t)) return null;
-            var b = new Button { Style = Style("HelpBtn"), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-            b.SetValue(System.Windows.Automation.AutomationProperties.NameProperty, "Help: " + t.Title);
+            var b = new Button { Theme = Theme("HelpBtn"), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            b.SetValue(Avalonia.Automation.AutomationProperties.NameProperty, "Help: " + t.Title);
             b.Click += delegate { ShowHelp(b, t); };
             return b;
         }
 
-        public static void ShowHelp(UIElement anchor, HelpText.Topic t)
+        public static void ShowHelp(Control anchor, HelpText.Topic t)
         {
-            var popup = new Popup { PlacementTarget = anchor, Placement = PlacementMode.Bottom, StaysOpen = false, AllowsTransparency = true, VerticalOffset = 6 };
+            Action close = null;
             var body = Stack(8, Text(t.Title, 15, "Text", FontWeights.SemiBold), Text(t.Body, 13, "Sub"));
-            var ok = Btn("Got it", delegate { popup.IsOpen = false; }, "BtnLink");
+            var ok = Btn("Got it", delegate { close(); }, "BtnLink");
             ok.HorizontalAlignment = HorizontalAlignment.Left;
             ok.Margin = new Thickness(-4, 10, 0, 0);
             body.Children.Add(ok);
             var card = Panel(body, 16);
             card.MaxWidth = 400;
-            card.Margin = new Thickness(0, 0, 12, 12);
-            card.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 18, ShadowDepth = 4, Opacity = 0.35 };
-            popup.Child = card;
-            popup.IsOpen = true;
+            card.Margin = new Thickness(0, 6, 12, 12);
+            card.BoxShadow = Shadow();
+            close = ShowPopup(anchor, card);
         }
 
         public static StackPanel TitleWithHelp(TextBlock title, string topic)
@@ -255,7 +267,7 @@ namespace Hatpick
 
         public static Button Picker(List<Choice> choices, string selected, Action<string> onPick, double width = 260)
         {
-            var btn = new Button { Style = Style("Btn"), Width = width, Height = 36, HorizontalContentAlignment = HorizontalAlignment.Stretch, Padding = new Thickness(10, 0, 10, 0) };
+            var btn = new Button { Theme = Theme("Btn"), Width = width, Height = 36, HorizontalContentAlignment = HorizontalAlignment.Stretch, Padding = new Thickness(10, 0, 10, 0) };
             Action<string> show = null;
             show = v =>
             {
@@ -266,7 +278,7 @@ namespace Hatpick
                 g.Children.Add(chev);
                 var row = new StackPanel { Orientation = Orientation.Horizontal };
                 bool hasHat = c.Acct != null || c.Hat != null;
-                row.Children.Add(c.Acct != null ? Hats.For(c.Acct, 20) : c.Hat != null ? Hats.Icon(c.Hat, 20) : (UIElement)new Border { Width = 0 });
+                row.Children.Add(c.Acct != null ? Hats.For(c.Acct, 20) : c.Hat != null ? Hats.Icon(c.Hat, 20) : (Control)new Border { Width = 0 });
                 var t = new TextBlock { Text = c.Label, Margin = new Thickness(hasHat ? 8 : 0, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
                 row.Children.Add(t);
                 g.Children.Add(row);
@@ -276,7 +288,7 @@ namespace Hatpick
             show(selected);
             btn.Click += delegate
             {
-                var popup = new Popup { PlacementTarget = btn, Placement = PlacementMode.Bottom, StaysOpen = false, AllowsTransparency = true, VerticalOffset = 4 };
+                Action close = null;
                 var list = new StackPanel();
                 foreach (var ch in choices)
                 {
@@ -287,16 +299,15 @@ namespace Hatpick
                     texts.Children.Add(Text(choice.Label, 13, "Text", (string)btn.Tag == choice.Value ? FontWeights.SemiBold : FontWeights.Normal));
                     if (!string.IsNullOrEmpty(choice.Sub)) texts.Children.Add(Text(choice.Sub, 11.5, "Muted"));
                     r.Children.Add(texts);
-                    var item = new Button { Style = Style("Row"), Content = r, MinHeight = 40 };
-                    item.Click += delegate { popup.IsOpen = false; show(choice.Value); onPick(choice.Value); };
+                    var item = new Button { Theme = Theme("Row"), Content = r, MinHeight = 40 };
+                    item.Click += delegate { close(); show(choice.Value); onPick(choice.Value); };
                     list.Children.Add(item);
                 }
                 var card = Panel(list, 6);
                 card.MinWidth = width;
-                card.Margin = new Thickness(0, 0, 12, 12);
-                card.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 18, ShadowDepth = 4, Opacity = 0.35 };
-                popup.Child = card;
-                popup.IsOpen = true;
+                card.Margin = new Thickness(0, 4, 12, 12);
+                card.BoxShadow = Shadow();
+                close = ShowPopup(btn, card);
             };
             return btn;
         }
@@ -323,7 +334,7 @@ namespace Hatpick
             { "bowler", new[] { new Part("main", "Body", "#6b4a2e"), new Part("trim", "Band", "#2e2118") } },
         };
 
-        public static string ImageDir { get { return System.IO.Path.Combine(Demo.On ? Demo.Root : AppDomain.CurrentDomain.BaseDirectory, "hats"); } }
+        public static string ImageDir { get { return System.IO.Path.Combine(Demo.On ? Demo.Root : Platform.DataDir, "hats"); } }
 
         public static string TintKey(string kind)
         {
@@ -337,13 +348,10 @@ namespace Hatpick
             }
         }
 
-        static SolidColorBrush B(string hex)
+        public static SolidColorBrush B(string hex)
         {
-            SolidColorBrush b;
-            try { b = (SolidColorBrush)new BrushConverter().ConvertFromString(hex); }
-            catch { b = new SolidColorBrush(Colors.Gray); }
-            b.Freeze();
-            return b;
+            Avalonia.Media.Color c;
+            return new SolidColorBrush(Avalonia.Media.Color.TryParse(hex, out c) ? c : Colors.Gray);
         }
 
         static void P(Canvas c, string data, string fill)
@@ -375,7 +383,7 @@ namespace Hatpick
         }
 
         // kind "none" = a dashed empty circle (no hat).
-        public static FrameworkElement Icon(string kind, double size, Dictionary<string, string> colors = null)
+        public static Control Icon(string kind, double size, Dictionary<string, string> colors = null)
         {
             Func<string, string> col = part => Color(kind, colors, part);
             var c = new Canvas { Width = 24, Height = 24 };
@@ -408,7 +416,7 @@ namespace Hatpick
                     E(c, 12, 15.6, 9, 1.7, col("main"));
                     break;
                 default:
-                    var ring = new Ellipse { Width = 18, Height = 18, StrokeThickness = 1.8, StrokeDashArray = new DoubleCollection { 2, 2 } };
+                    var ring = new Ellipse { Width = 18, Height = 18, StrokeThickness = 1.8, StrokeDashArray = new Avalonia.Collections.AvaloniaList<double> { 2, 2 } };
                     ring.SetResourceReference(Shape.StrokeProperty, "Dashed");
                     Canvas.SetLeft(ring, 3); Canvas.SetTop(ring, 3);
                     c.Children.Add(ring);
@@ -425,24 +433,20 @@ namespace Hatpick
             return System.IO.File.Exists(p) ? p : null;
         }
 
-        static FrameworkElement Picture(string path, double size)
+        static Control Picture(string path, double size)
         {
             try
             {
-                var bmp = new System.Windows.Media.Imaging.BitmapImage();
-                bmp.BeginInit();
-                bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;   // don't keep the file locked
-                bmp.UriSource = new Uri(path);
-                bmp.DecodePixelWidth = (int)Math.Max(32, size * 2);
-                bmp.EndInit();
-                bmp.Freeze();
+                Avalonia.Media.Imaging.Bitmap bmp;
+                using (var f = System.IO.File.OpenRead(path))   // read it all now: don't keep the file locked
+                    bmp = Avalonia.Media.Imaging.Bitmap.DecodeToWidth(f, (int)Math.Max(32, size * 2));
                 return new Image { Source = bmp, Width = size, Height = size, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center };
             }
             catch { return Icon("none", size); }
         }
 
         // An account's hat: its picture if it has one, else its hat in its colors.
-        public static FrameworkElement For(Account a, double size)
+        public static Control For(Account a, double size)
         {
             if (a == null) return Icon("none", size);
             string img = ImagePath(a);
@@ -475,7 +479,7 @@ namespace Hatpick
             else if (colors != null && colors.TryGetValue("main", out main) && !string.IsNullOrEmpty(main))
             {
                 var tint = B(main).Color;
-                b.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(58, tint.R, tint.G, tint.B));
+                b.Background = new SolidColorBrush(Avalonia.Media.Color.FromArgb(58, tint.R, tint.G, tint.B));
             }
             else b.SetResourceReference(Border.BackgroundProperty, TintKey(kind));
         }

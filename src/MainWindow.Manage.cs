@@ -2,10 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Media;
-using System.Windows.Shapes;
+using Avalonia.Controls.Shapes;
 
 namespace Hatpick
 {
@@ -16,7 +13,7 @@ namespace Hatpick
 
         string selectedHat;   // label of the hat picked on the rack
 
-        FrameworkElement HatsPage()
+        Control HatsPage()
         {
             var sp = new StackPanel();
             sp.Children.Add(Header("Hats", "hats",
@@ -42,7 +39,7 @@ namespace Hatpick
             var gcmBox = new StackPanel();
             gcmBox.Children.Add(Ui.TitleWithHelp(Ui.Text("Signed in to Git Credential Manager", 15, "Text", FontWeights.SemiBold), "signin"));
             if (!Git.GcmAvailable)
-                gcmBox.Children.Add(Ui.Text("Git Credential Manager wasn't found. It comes with Git for Windows - install or update it from git-scm.com.", 13, "Sub"));
+                gcmBox.Children.Add(Ui.Text("Git Credential Manager wasn't found. " + Platform.GcmInstall, 13, "Sub"));
             else
             {
                 if (gcm.Count == 0) gcmBox.Children.Add(Ui.Text("No GitHub accounts are signed in yet.", 13, "Sub"));
@@ -88,9 +85,13 @@ namespace Hatpick
             int n = settings.accounts.Count + 1;
             for (int i = 0; i < n; i++) g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Slot) });
 
-            var wood = new LinearGradientBrush(Color.FromRgb(0xa8, 0x76, 0x44), Color.FromRgb(0x6b, 0x44, 0x23), 90);
+            var wood = new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative), EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+                GradientStops = { new GradientStop(Color.FromRgb(0xa8, 0x76, 0x44), 0), new GradientStop(Color.FromRgb(0x6b, 0x44, 0x23), 1) }
+            };
             var bar = new Border { CornerRadius = new CornerRadius(9), Background = wood, Margin = new Thickness(-8, 0, -8, 0) };
-            bar.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 8, ShadowDepth = 3, Opacity = 0.35 };
+            bar.BoxShadow = Ui.Shadow(8, 3);
             Grid.SetRow(bar, 2); Grid.SetColumnSpan(bar, n);
             g.Children.Add(bar);
             foreach (var end in new[] { HorizontalAlignment.Left, HorizontalAlignment.Right })   // mounting screws
@@ -113,11 +114,11 @@ namespace Hatpick
                 Grid.SetRow(peg, 1); Grid.SetColumn(peg, i);
                 g.Children.Add(peg);
 
-                var hatBtn = new Button { Style = Ui.Style("Row"), Padding = new Thickness(6), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, MinHeight = 0 };
+                var hatBtn = new Button { Theme = Ui.Theme("Row"), Padding = new Thickness(6), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, MinHeight = 0 };
                 if (isAdd)
                 {
                     var plus = new Grid { Width = 72, Height = 72 };
-                    var ring = new Ellipse { StrokeThickness = 2, StrokeDashArray = new DoubleCollection { 3, 3 } };
+                    var ring = new Ellipse { StrokeThickness = 2, StrokeDashArray = new Avalonia.Collections.AvaloniaList<double> { 3, 3 } };
                     ring.SetResourceReference(Shape.StrokeProperty, "Dashed");
                     plus.Children.Add(ring);
                     var ic = Ui.Icon("plus", 26, "Muted");
@@ -125,7 +126,7 @@ namespace Hatpick
                     plus.Children.Add(ic);
                     hatBtn.Content = plus;
                     hatBtn.Margin = new Thickness(0, 0, 0, PegH - Tuck - 6 + 2);
-                    hatBtn.ToolTip = "Add a hat";
+                    hatBtn.Tip("Add a hat");
                     hatBtn.Click += delegate { AddAccount(); };
                 }
                 else
@@ -133,20 +134,21 @@ namespace Hatpick
                     var acct = a;
                     var hat = Hats.For(a, 80);
                     hatBtn.Content = hat;
-                    hatBtn.ToolTip = a.label + "  -  " + a.email + "\nClick to see it, double-click to edit";
+                    hatBtn.Tip(a.label + "  -  " + a.email + "\nClick to see it, double-click to edit");
                     // seat the hat's brim on the peg: drop the empty space under the drawing
                     double gap = (Hats.ImagePath(a) != null ? 0.04 : Hats.BottomGap(a.hat)) * 80 + 6;
                     hatBtn.Margin = new Thickness(0, 0, 0, PegH - Tuck - gap);
-                    var accent = TryFindResource("Accent") as SolidColorBrush;
+                    var accent = AppTheme.Brush("Accent") as SolidColorBrush;
                     hat.Effect = on && accent != null
-                        ? new System.Windows.Media.Effects.DropShadowEffect { Color = accent.Color, BlurRadius = 22, ShadowDepth = 0, Opacity = 0.75 }   // the picked hat glows
-                        : new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 6, ShadowDepth = 2, Direction = 270, Opacity = 0.35 };
+                        ? new DropShadowEffect { Color = accent.Color, BlurRadius = 22, OffsetX = 0, OffsetY = 0, Opacity = 0.75 }   // the picked hat glows
+                        : new DropShadowEffect { BlurRadius = 6, OffsetX = 0, OffsetY = 2, Opacity = 0.35 };
                     hatBtn.Click += delegate { selectedHat = acct.label; Render(); };
-                    hatBtn.MouseDoubleClick += delegate { EditAccount(acct); };
+                    // The first click re-renders the rack, so the second lands on the new button.
+                    hatBtn.AddHandler(PointerPressedEvent, (s, e) => { if (e.ClickCount == 2) { e.Handled = true; EditAccount(acct); } }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
                 }
-                System.Windows.Automation.AutomationProperties.SetName(hatBtn, isAdd ? "Add a hat" : a.label + " hat");
+                Avalonia.Automation.AutomationProperties.SetName(hatBtn, isAdd ? "Add a hat" : a.label + " hat");
                 Grid.SetRow(hatBtn, 0); Grid.SetRowSpan(hatBtn, 2); Grid.SetColumn(hatBtn, i);
-                Panel.SetZIndex(hatBtn, 2);
+                hatBtn.ZIndex = 2;
                 g.Children.Add(hatBtn);
 
                 int count = a == null ? 0 : reports.Count(r => string.Equals(r.Email, a.email, StringComparison.OrdinalIgnoreCase));
@@ -195,7 +197,7 @@ namespace Hatpick
 
         // ---------- Folders ----------
 
-        FrameworkElement FoldersPage()
+        Control FoldersPage()
         {
             var sp = new StackPanel();
             sp.Children.Add(Header("Folders", "folders",
@@ -205,7 +207,7 @@ namespace Hatpick
 
             var explain = Ui.Panel(Ui.Stack(6,
                 Ui.Text("Watched folders vs. single repos", 14, "Text", FontWeights.SemiBold),
-                Ui.Text("Watch a folder when it holds several repos, like Documents\\GitHub. Every repo inside is listed, and the folder's default hat applies to all of them - including repos you clone there later. " +
+                Ui.Text("Watch a folder when it holds several repos, like " + Platform.ReposFolder + ". Every repo inside is listed, and the folder's default hat applies to all of them - including repos you clone there later. " +
                         "Add a single repo when it lives somewhere else; you pick its hat directly. A repo's own setting always beats the folder default.", 13, "Sub")), 16, "InfoBg", "InfoBorder", 10);
             explain.Margin = new Thickness(0, 0, 0, 20);
             sp.Children.Add(explain);
@@ -233,14 +235,19 @@ namespace Hatpick
             }
             sp.Children.Add(singles);
 
-            var explorer = new CheckBox { Content = "Add \"Analyze with Hatpick\" to Explorer's right-click menu for folders", IsChecked = ExplorerMenu.Installed };
-            explorer.Click += delegate
+            if (ExplorerMenu.Supported)
             {
-                try { if (explorer.IsChecked == true) ExplorerMenu.Install(Program.ExePath); else ExplorerMenu.Remove(); }
-                catch (Exception e) { Dialogs.Info(this, "Couldn't change the right-click menu", e.Message); }
-                explorer.IsChecked = ExplorerMenu.Installed;
-            };
-            sp.Children.Add(Ui.Panel(Ui.Stack(6, explorer, Ui.Text("Per-user, no admin rights needed. On Windows 11 it's under \"Show more options\". You can also drop any folder onto this window.", 12, "Faint")), 16));
+                var explorer = new CheckBox { Content = "Add \"Analyze with Hatpick\" to Explorer's right-click menu for folders", IsChecked = ExplorerMenu.Installed };
+                explorer.Click += delegate
+                {
+                    try { if (explorer.IsChecked == true) ExplorerMenu.Install(Platform.ExePath); else ExplorerMenu.Remove(); }
+                    catch (Exception e) { Dialogs.Info(this, "Couldn't change the right-click menu", e.Message); }
+                    explorer.IsChecked = ExplorerMenu.Installed;
+                };
+                sp.Children.Add(Ui.Panel(Ui.Stack(6, explorer, Ui.Text("Per-user, no admin rights needed. On Windows 11 it's under \"Show more options\". You can also drop any folder onto this window.", 12, "Faint")), 16));
+            }
+            else
+                sp.Children.Add(Ui.Panel(Ui.Text("To analyze any folder, drop it onto this window from " + Platform.FileManager + ", or open Hatpick with the folder: hatpick ~/code/my-repo", 12.5, "Sub"), 16));
             return PageScroll(sp);
         }
 
@@ -275,7 +282,7 @@ namespace Hatpick
 
         // ---------- Reset ----------
 
-        FrameworkElement ResetPage()
+        Control ResetPage()
         {
             var sp = new StackPanel();
             sp.Children.Add(Header("Reset", "reset"));

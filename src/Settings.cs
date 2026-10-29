@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Web.Script.Serialization;
+using System.Text.Json;
 
 namespace Hatpick
 {
@@ -43,7 +43,7 @@ namespace Hatpick
         public string theme { get; set; }                  // "dark" or "light"
 
         // Properties, not fields, so --demo is known before any path is worked out.
-        static string Here { get { return Demo.On ? Demo.Root : AppDomain.CurrentDomain.BaseDirectory; } }
+        static string Here { get { return Demo.On ? Demo.Root : Platform.DataDir; } }
         public static string FilePath { get { return Path.Combine(Here, "hatpick.json"); } }
         // Settings files from the app's earlier names (Gitpicky, GitPicker), newest first.
         static string[] OldFiles { get { return new[] { Path.Combine(Here, "gitpicky.json"), Path.Combine(Here, "gitpicker.json") }; } }
@@ -59,7 +59,7 @@ namespace Hatpick
                 string file = File.Exists(FilePath) ? FilePath : OldFiles.FirstOrDefault(File.Exists);
                 if (file != null)
                 {
-                    s = new JavaScriptSerializer().Deserialize<Settings>(File.ReadAllText(file));
+                    s = JsonSerializer.Deserialize<Settings>(File.ReadAllText(file), Json);
                     if (s != null && file != FilePath) s.setupDone = true;   // carried over from an earlier name
                 }
             }
@@ -75,15 +75,17 @@ namespace Hatpick
             return s;
         }
 
+        static readonly JsonSerializerOptions Json = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
         public void Save()
         {
-            File.WriteAllText(FilePath, new JavaScriptSerializer().Serialize(this), new UTF8Encoding(false));
+            Directory.CreateDirectory(Here);
+            File.WriteAllText(FilePath, JsonSerializer.Serialize(this), new UTF8Encoding(false));
         }
 
         public Settings Copy()
         {
-            var js = new JavaScriptSerializer();
-            return js.Deserialize<Settings>(js.Serialize(this));
+            return JsonSerializer.Deserialize<Settings>(JsonSerializer.Serialize(this), Json);
         }
 
         public Account AccountByEmail(string email)
